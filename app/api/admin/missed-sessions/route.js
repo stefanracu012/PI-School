@@ -75,7 +75,7 @@ export async function PUT(request) {
   }
 }
 
-// DELETE - Șterge o sesiune ratată
+// DELETE - Șterge o sesiune ratată sau toate
 export async function DELETE(request) {
   const session = await getServerSession(authOptions)
   
@@ -85,12 +85,26 @@ export async function DELETE(request) {
 
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
-
-  if (!id) {
-    return NextResponse.json({ error: 'ID required' }, { status: 400 })
-  }
+  const deleteAll = searchParams.get('deleteAll')
+  const acknowledged = searchParams.get('acknowledged')
 
   try {
+    // Ștergere în bulk
+    if (deleteAll === 'true') {
+      const where = {}
+      if (acknowledged !== null && acknowledged !== undefined) {
+        where.acknowledged = acknowledged === 'true'
+      }
+
+      const result = await prisma.missedSession.deleteMany({ where })
+      return NextResponse.json({ success: true, count: result.count })
+    }
+
+    // Ștergere individuală
+    if (!id) {
+      return NextResponse.json({ error: 'ID required' }, { status: 400 })
+    }
+
     await prisma.missedSession.delete({
       where: { id }
     })
