@@ -186,6 +186,8 @@ export async function GET(request) {
     for (const group of groupsWithLessonsYesterday) {
       // Skip if group has no active students
       if (group.groupStudents.length === 0) continue
+      // Skip if group has no teacher (orphan)
+      if (!group.teacher) continue
       
       // Check if lesson was properly conducted (session exists with lessons deducted)
       const hadSession = group.lessonSessions.length > 0
@@ -286,6 +288,8 @@ export async function GET(request) {
     })
 
     for (const makeup of missedMakeupLessons) {
+      // Skip orphan makeup (teacher deleted directly from DB)
+      if (!makeup.teacher) continue
       // Check if notification already exists for this makeup
       // Note: MongoDB doesn't support JSON path queries, so we check by groupId, type, date
       // and then filter in code

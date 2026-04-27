@@ -123,9 +123,9 @@ export async function DELETE(request, { params }) {
 
     // Notificare Telegram despre anulare
     await notifyCancelledLesson(
-      lessonSession.group.name,
-      lessonSession.group.teacher.name,
-      lessonSession.group.course.title,
+      lessonSession.group?.name,
+      lessonSession.group?.teacher?.name ?? 'Fără profesor',
+      lessonSession.group?.course?.title,
       new Date(lessonSession.date).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' }),
       false
     )

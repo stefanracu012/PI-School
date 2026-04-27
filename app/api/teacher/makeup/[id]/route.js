@@ -494,9 +494,9 @@ export async function DELETE(request, { params }) {
 
     // Trimite notificare Telegram
     await notifyCancelledLesson(
-      makeupLesson.group.name,
-      makeupLesson.group.teacher.name,
-      makeupLesson.group.course?.title || 'N/A',
+      makeupLesson.group?.name,
+      makeupLesson.group?.teacher?.name ?? 'Fără profesor',
+      makeupLesson.group?.course?.title || 'N/A',
       scheduledTime,
       true,
       studentNames
