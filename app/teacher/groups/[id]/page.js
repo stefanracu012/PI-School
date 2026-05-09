@@ -50,6 +50,10 @@ export default async function TeacherGroupDetailPage({ params }) {
   const session = await getServerSession(authOptions)
   const { id } = await params
 
+  if (!session?.user?.id) {
+    redirect('/login')
+  }
+
   // Check if a session already exists for today
   const today = new Date()
   today.setHours(0, 0, 0, 0)

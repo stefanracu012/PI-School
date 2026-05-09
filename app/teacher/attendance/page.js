@@ -1,11 +1,16 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { CalendarDaysIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline'
 
 export default async function TeacherAttendancePage() {
   const session = await getServerSession(authOptions)
+
+  if (!session?.user?.id) {
+    redirect('/login')
+  }
 
   // Get all sessions for teacher's groups
   const sessions = await prisma.lessonSession.findMany({

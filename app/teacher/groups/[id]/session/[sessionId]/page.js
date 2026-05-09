@@ -9,6 +9,10 @@ export default async function SessionDetailPage({ params }) {
   const userSession = await getServerSession(authOptions)
   const { id, sessionId } = await params
 
+  if (!userSession?.user?.id) {
+    redirect('/login')
+  }
+
   const group = await prisma.group.findUnique({
     where: { id },
     include: {

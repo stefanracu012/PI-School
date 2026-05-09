@@ -1,10 +1,15 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { redirect } from 'next/navigation'
 import TeacherGroupsClient from './TeacherGroupsClient'
 
 export default async function TeacherGroupsPage() {
   const session = await getServerSession(authOptions)
+
+  if (!session?.user?.id) {
+    redirect('/login')
+  }
 
   const [groups, courses, branches, allGroups] = await Promise.all([
     prisma.group.findMany({

@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { 
   UserGroupIcon, 
@@ -12,6 +13,10 @@ import {
 
 export default async function TeacherDashboardPage() {
   const session = await getServerSession(authOptions)
+
+  if (!session?.user?.id) {
+    redirect('/login')
+  }
 
   // Get teacher's groups and statistics
   const [groups, students, recentSessions, makeupLessons] = await Promise.all([
