@@ -12,10 +12,15 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get valid teacher IDs to skip orphan groups (teacher deleted directly from DB)
+    const validTeachers = await prisma.user.findMany({ select: { id: true } })
+    const validTeacherIds = validTeachers.map(t => t.id)
+
     // Fetch all active groups with necessary relations
     const groups = await prisma.group.findMany({
       where: { 
-        active: true 
+        active: true,
+        teacherId: { in: validTeacherIds }
       },
       include: {
         course: { select: { id: true, title: true } },
@@ -46,10 +51,11 @@ export async function GET() {
       orderBy: { name: 'asc' }
     })
     
-    // Fetch scheduled makeup lessons (SCHEDULED or IN_PROGRESS)
+    // Fetch scheduled makeup lessons (SCHEDULED or IN_PROGRESS) with valid teachers only
     const makeupLessons = await prisma.makeupLesson.findMany({
       where: {
-        status: { in: ['SCHEDULED', 'IN_PROGRESS'] }
+        status: { in: ['SCHEDULED', 'IN_PROGRESS'] },
+        teacherId: { in: validTeacherIds }
       },
       include: {
         group: { 

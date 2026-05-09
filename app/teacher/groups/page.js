@@ -11,6 +11,10 @@ export default async function TeacherGroupsPage() {
     redirect('/login')
   }
 
+  // Get valid teacher IDs to filter out orphan groups (teacher deleted directly from DB)
+  const validTeachers = await prisma.user.findMany({ select: { id: true } })
+  const validTeacherIds = validTeachers.map(t => t.id)
+
   const [groups, courses, branches, allGroups] = await Promise.all([
     prisma.group.findMany({
       where: { teacherId: session.user.id },
@@ -39,9 +43,9 @@ export default async function TeacherGroupsPage() {
       orderBy: { name: 'asc' },
       select: { id: true, name: true }
     }),
-    // Get all groups for schedule display
+    // Get all groups for schedule display (only groups with valid teachers)
     prisma.group.findMany({
-      where: { active: true },
+      where: { active: true, teacherId: { in: validTeacherIds } },
       include: {
         teacher: { select: { name: true } },
         branch: { select: { name: true } }
