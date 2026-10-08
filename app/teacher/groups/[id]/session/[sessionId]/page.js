@@ -4,19 +4,15 @@ import { prisma } from '@/lib/prisma'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import AttendanceManager from '@/components/teacher/AttendanceManager'
+import SessionCorrectionPanel from '@/components/teacher/SessionCorrectionPanel'
 
 export default async function SessionDetailPage({ params }) {
   const userSession = await getServerSession(authOptions)
   const { id, sessionId } = await params
 
-  if (!userSession?.user?.id) {
-    redirect('/login')
-  }
-
   const group = await prisma.group.findUnique({
     where: { id },
     include: {
-      course: true,
       teacher: true,
       groupStudents: {
         where: {
@@ -89,7 +85,7 @@ export default async function SessionDetailPage({ params }) {
             day: 'numeric'
           })}
         </h1>
-        <p className="text-gray-600 mt-0.5 xs:mt-1 text-xs xs:text-sm md:text-base">{group.name} • {group.course.title}</p>
+        <p className="text-gray-600 mt-0.5 xs:mt-1 text-xs xs:text-sm md:text-base">{group.name}{group.level ? ` • ${group.level}` : ''}</p>
       </div>
 
       {/* Session Status */}
@@ -125,6 +121,25 @@ export default async function SessionDetailPage({ params }) {
         lessonsDeducted={lessonSession.lessonsDeducted}
         isExpired={isExpired}
         sessionDate={lessonSession.date}
+        billingType={group.billingType}
+      />
+
+      {/* Corectare: pentru sesiuni deja procesate, sau oricând pentru data/notițele ei */}
+      <SessionCorrectionPanel
+        session={{
+          id: lessonSession.id,
+          date: lessonSession.date,
+          notes: lessonSession.notes,
+          createdAt: lessonSession.createdAt,
+          lessonsDeducted: lessonSession.lessonsDeducted,
+          attendances: lessonSession.attendances.map((a) => ({
+            id: a.id,
+            status: a.status,
+            notes: a.notes,
+            student: { fullName: a.student?.fullName },
+          })),
+        }}
+        groupId={group.id}
       />
     </div>
   )

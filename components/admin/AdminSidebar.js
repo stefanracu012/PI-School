@@ -10,23 +10,23 @@ import { usePermissions } from '@/hooks/usePermissions'
 // Spinner component for loading state
 function LoadingSpinner({ className = "w-5 h-5" }) {
   return (
-    <svg 
-      className={`animate-spin ${className}`} 
-      xmlns="http://www.w3.org/2000/svg" 
-      fill="none" 
+    <svg
+      className={`animate-spin ${className}`}
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
       viewBox="0 0 24 24"
     >
-      <circle 
-        className="opacity-25" 
-        cx="12" 
-        cy="12" 
-        r="10" 
-        stroke="currentColor" 
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
         strokeWidth="4"
       />
-      <path 
-        className="opacity-75" 
-        fill="currentColor" 
+      <path
+        className="opacity-75"
+        fill="currentColor"
         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
       />
     </svg>
@@ -35,11 +35,10 @@ function LoadingSpinner({ className = "w-5 h-5" }) {
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: 'home' },
+  { name: 'Statistică', href: '/admin/statistics', icon: 'chart', permission: 'statistics.view' },
   { name: 'Notificări', href: '/admin/notifications', icon: 'bell', permission: 'notifications.view' },
   { name: 'Orar', href: '/admin/orar', icon: 'clock', permission: 'schedule.view' },
-  { name: 'Cursuri', href: '/admin/courses', icon: 'book', permission: 'courses.view' },
-  { name: 'Înscrieri', href: '/admin/enrollments', icon: 'users', permission: 'inscrieri.view' },
-  { name: 'Mesaje Contact', href: '/admin/contact', icon: 'chat', permission: 'contact.view' },
+  { name: 'Leads', href: '/admin/leads', icon: 'chat', permission: 'leads.view' },
   { name: 'Elevi', href: '/admin/students', icon: 'academic', permission: 'students.view' },
   { name: 'Personal', href: '/admin/teachers', icon: 'user', permission: 'teachers.view' },
   { name: 'Grupe', href: '/admin/groups', icon: 'collection', permission: 'groups.view' },
@@ -48,7 +47,13 @@ const navigation = [
   { name: 'Lecții Ratate', href: '/admin/missed-sessions', icon: 'warning', permission: 'missed-sessions.view' },
   { name: 'Recuperări', href: '/admin/makeup', icon: 'refresh', permission: 'makeup.view' },
   { name: 'Plăți', href: '/admin/payments', icon: 'banknotes', permission: 'payments.view' },
-  { name: 'Reviews', href: '/admin/reviews', icon: 'star', permission: 'reviews.view' },
+  { name: 'Mesaje', href: '/admin/messages', icon: 'chat', permission: 'messages.view' },
+  { name: 'Reclame', href: '/admin/ads', icon: 'megaphone', permission: 'ads.view' },
+  // Site-ul public PI School
+  { name: 'Cursuri (site)', href: '/admin/courses', icon: 'book', permission: 'courses.view' },
+  { name: 'Recenzii (site)', href: '/admin/reviews', icon: 'star', permission: 'reviews.view' },
+  { name: 'Înscrieri vechi', href: '/admin/enrollments', icon: 'clipboard', permission: 'inscrieri.view' },
+  { name: 'Contact vechi', href: '/admin/contact', icon: 'document', permission: 'contact.view' },
   { name: 'Securitate', href: '/admin/security', icon: 'shield', permission: 'security.manage' },
   { name: 'Alerte Securitate', href: '/admin/security-alerts', icon: 'exclamation', permission: 'security.view' },
   { name: 'Audit Logs', href: '/admin/audit-logs', icon: 'document', permission: 'audit.view' }
@@ -117,9 +122,19 @@ const icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
     </svg>
   ),
+  chart: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>
+  ),
   clipboard: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+    </svg>
+  ),
+  megaphone: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
     </svg>
   ),
   chat: (
@@ -150,6 +165,11 @@ const icons = {
   document: (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  ),
+  puzzle: (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 10.879a3 3 0 10-4.242 4.242M9 8V5a2 2 0 012-2h2a2 2 0 012 2v3m4 4h-3m4 0a2 2 0 012 2v2a2 2 0 01-2 2h-3m-8-8H5a2 2 0 00-2 2v2a2 2 0 002 2h3m0-8v8m8 0v3a2 2 0 01-2 2h-2a2 2 0 01-2-2v-3" />
     </svg>
   )
 }
@@ -183,10 +203,10 @@ export default function AdminSidebar({ user }) {
       if (closeMobile) setMobileMenuOpen(false)
       return // Nu naviga dacă suntem deja pe pagină
     }
-    
+
     setPendingHref(href)
     if (closeMobile) setMobileMenuOpen(false)
-    
+
     startTransition(() => {
       router.push(href)
     })
@@ -195,97 +215,89 @@ export default function AdminSidebar({ user }) {
   return (
     <>
       {/* Desktop Sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
-        <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-white border-r border-gray-200 px-6 pb-4">
-          {/* Logo */}
-          <div className="flex h-16 shrink-0 items-center">
-            <Link href="/admin" className="flex items-center gap-3">
-              <div className="relative w-10 h-10 rounded-full overflow-hidden ring-2 ring-[#30919f]/30">
-                <Image
-                  src="/pi.png"
-                  alt="PI School"
-                  fill
-                  className="object-cover"
-                />
+      <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col bg-white border-r border-gray-200">
+        {/* Logo — fixed height, never shrinks */}
+        <div className="flex h-16 shrink-0 items-center px-6 border-b border-gray-100">
+          <Link href="/admin" className="flex items-center gap-3">
+            <Image
+              src="/pi.png"
+              alt="PI School"
+              width={882}
+              height={882}
+              className="h-9 w-auto rounded-full shrink-0 object-contain"
+              priority
+            />
+            <span className="text-lg font-bold text-gray-900">PI SCHOOL</span>
+          </Link>
+        </div>
+
+        {/* Navigation — fills remaining space and scrolls */}
+        <nav className="flex-1 overflow-y-auto scrollbar-sidebar px-4 py-3">
+          <ul role="list" className="space-y-1">
+            {filteredNavigation.map((item) => {
+              const isActive = pathname === item.href ||
+                (item.href !== '/admin' && item.href !== '/admin/security' && pathname.startsWith(item.href))
+              const isLoading = isPending && pendingHref === item.href
+
+              return (
+                <li key={item.name}>
+                  <button
+                    onClick={() => handleNavigation(item.href)}
+                    disabled={isLoading}
+                    className={`
+                      w-full group flex gap-x-3 rounded-lg p-3 text-sm font-medium leading-6 transition-all
+                      ${isActive
+                        ? 'bg-indigo-50 text-indigo-600'
+                        : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-50'
+                      }
+                      ${isLoading ? 'opacity-70' : ''}
+                    `}
+                  >
+                    <span className={isActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-600'}>
+                      {isLoading ? <LoadingSpinner className="w-5 h-5" /> : icons[item.icon]}
+                    </span>
+                    {item.name}
+                    {isLoading && (
+                      <LoadingSpinner className="w-4 h-4 ml-auto" />
+                    )}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </nav>
+
+        {/* User Info — fixed at bottom, never shrinks */}
+        <div className="shrink-0 border-t border-gray-200 px-4 py-3">
+          <div className="flex items-center gap-x-4 text-sm font-medium text-gray-900">
+            {user?.image ? (
+              <Image
+                src={user.image}
+                alt={user.name || 'User'}
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-full object-cover"
+              />
+            ) : (
+              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0">
+                <span className="text-white font-medium">
+                  {user?.name?.charAt(0) || user?.email?.charAt(0) || 'A'}
+                </span>
               </div>
-              <div className="flex flex-col">
-                <span className="text-lg font-bold text-gray-900">PI SCHOOL</span>
-                <span className="text-[9px] font-medium text-[#30919f] tracking-[0.15em] uppercase -mt-1">Admin Panel</span>
-              </div>
-            </Link>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="truncate">{user?.name || 'Admin'}</p>
+              <p className="text-xs text-gray-500 truncate">{user?.role}</p>
+            </div>
           </div>
-
-          {/* Navigation */}
-          <nav className="flex flex-1 flex-col">
-            <ul role="list" className="flex flex-1 flex-col gap-y-7">
-              <li>
-                <ul role="list" className="-mx-2 space-y-1">
-                  {filteredNavigation.map((item) => {
-                    const isActive = pathname === item.href || 
-                      (item.href !== '/admin' && item.href !== '/admin/security' && pathname.startsWith(item.href))
-                    const isLoading = isPending && pendingHref === item.href
-                    
-                    return (
-                      <li key={item.name}>
-                        <button
-                          onClick={() => handleNavigation(item.href)}
-                          disabled={isLoading}
-                          className={`
-                            w-full group flex gap-x-3 rounded-lg p-3 text-sm font-medium leading-6 transition-all
-                            ${isActive
-                              ? 'bg-indigo-50 text-indigo-600'
-                              : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-50'
-                            }
-                            ${isLoading ? 'opacity-70' : ''}
-                          `}
-                        >
-                          <span className={isActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-600'}>
-                            {isLoading ? <LoadingSpinner className="w-5 h-5" /> : icons[item.icon]}
-                          </span>
-                          {item.name}
-                          {isLoading && (
-                            <LoadingSpinner className="w-4 h-4 ml-auto" />
-                          )}
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </li>
-
-              {/* User Info */}
-              <li className="mt-auto">
-                <div className="flex items-center gap-x-4 px-2 py-3 text-sm font-medium text-gray-900">
-                  {user?.image ? (
-                    <Image
-                      src={user.image}
-                      alt={user.name || 'User'}
-                      width={40}
-                      height={40}
-                      className="h-10 w-10 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                      <span className="text-white font-medium">
-                        {user?.name?.charAt(0) || user?.email?.charAt(0) || 'A'}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate">{user?.name || 'Admin'}</p>
-                    <p className="text-xs text-gray-500 truncate">{user?.role}</p>
-                  </div>
-                </div>
-              </li>
-            </ul>
-          </nav>
         </div>
       </div>
 
-      {/* Mobile Menu Button - Fixed bottom right */}
+      {/* Mobile Menu Button - Fixed bottom right (lifted above iOS home bar / Exit button) */}
       <button
         onClick={() => setMobileMenuOpen(true)}
-        className="lg:hidden fixed bottom-4 right-4 z-50 bg-indigo-600 text-white p-3 rounded-full shadow-lg hover:bg-indigo-700 transition-colors"
+        className="lg:hidden fixed right-4 z-50 bg-indigo-600 text-white p-3 rounded-full shadow-lg hover:bg-indigo-700 transition-colors"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}
         aria-label="Deschide meniul"
       >
         <Bars3Icon className="h-6 w-6" />
@@ -293,35 +305,33 @@ export default function AdminSidebar({ user }) {
 
       {/* Mobile Drawer Overlay */}
       {mobileMenuOpen && (
-        <div 
+        <div
           className="lg:hidden fixed inset-0 bg-black/50 z-50"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
 
       {/* Mobile Drawer */}
-      <div className={`lg:hidden fixed inset-y-0 left-0 w-[280px] max-w-[calc(100vw-40px)] bg-white z-50 transform transition-transform duration-300 ease-in-out ${
+      <div className={`lg:hidden fixed inset-y-0 left-0 w-[280px] max-w-[calc(100vw-40px)] bg-white z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
         mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      }`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
         {/* Header cu close button */}
-        <div className="flex items-center justify-between h-14 px-3 border-b border-gray-200">
-          <Link 
-            href="/admin" 
+        <div className="flex items-center justify-between h-14 px-3 border-b border-gray-200 shrink-0">
+          <Link
+            href="/admin"
             className="flex items-center gap-2"
             onClick={() => setMobileMenuOpen(false)}
           >
-            <div className="relative w-8 h-8 rounded-full overflow-hidden ring-2 ring-[#30919f]/30">
-              <Image
-                src="/pi.png"
-                alt="PI School"
-                fill
-                className="object-cover"
-              />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-gray-900">PI SCHOOL</h1>
-              <p className="text-[8px] text-[#30919f] font-medium tracking-wide uppercase -mt-0.5">Admin Panel</p>
-            </div>
+            <Image
+              src="/pi.png"
+              alt="PI School"
+              width={882}
+              height={882}
+              className="h-8 w-auto rounded-full shrink-0 object-contain"
+            />
+            <span className="text-base font-bold text-gray-900">PI SCHOOL</span>
           </Link>
           <button
             onClick={() => setMobileMenuOpen(false)}
@@ -333,12 +343,12 @@ export default function AdminSidebar({ user }) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto max-h-[calc(100vh-140px)]">
+        <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto scrollbar-sidebar">
           {filteredNavigation.map((item) => {
-            const isActive = pathname === item.href || 
+            const isActive = pathname === item.href ||
               (item.href !== '/admin' && item.href !== '/admin/security' && pathname.startsWith(item.href))
             const isLoading = isPending && pendingHref === item.href
-            
+
             return (
               <button
                 key={item.name}
@@ -366,7 +376,7 @@ export default function AdminSidebar({ user }) {
         </nav>
 
         {/* User Info */}
-        <div className="absolute bottom-0 left-0 right-0 p-2.5 border-t border-gray-200 bg-white">
+        <div className="shrink-0 p-2.5 border-t border-gray-200 bg-white">
           <div className="flex items-center gap-2 px-1.5 py-1.5">
             {user?.image ? (
               <Image

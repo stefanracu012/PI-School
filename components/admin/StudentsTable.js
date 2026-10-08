@@ -74,7 +74,7 @@ export default function StudentsTable({ students, groups }) {
                 <option value="">Toate grupele</option>
                 {groups.map(group => (
                   <option key={group.id} value={group.id}>
-                    {group.name} ({group.course?.title || 'Fără curs'})
+                    {group.name} ({group.level || 'Fără nivel'})
                   </option>
                 ))}
               </select>
@@ -135,7 +135,12 @@ export default function StudentsTable({ students, groups }) {
               filteredStudents.map((student) => (
                 <tr key={student.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
-                    <p className="font-medium text-gray-900">{student.fullName}</p>
+                    <Link
+                      href={`/admin/students/${student.id}`}
+                      className="font-medium text-gray-900 hover:text-indigo-600"
+                    >
+                      {student.fullName}
+                    </Link>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     {student.age ? `${student.age} ani` : '-'}
@@ -164,10 +169,16 @@ export default function StudentsTable({ students, groups }) {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-3">
+                      <Link
+                        href={`/admin/students/${student.id}`}
+                        className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                      >
+                        Detalii
+                      </Link>
                       <PermissionGate permission="students.edit">
                         <Link
-                          href={`/admin/students/${student.id}`}
-                          className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                          href={`/admin/students/${student.id}/edit`}
+                          className="text-gray-600 hover:text-gray-900 text-sm font-medium"
                         >
                           Editează
                         </Link>
@@ -195,9 +206,12 @@ export default function StudentsTable({ students, groups }) {
             <div key={student.id} className="bg-white rounded-xl xs:rounded-2xl shadow-sm border border-gray-100 p-3 xs:p-4 space-y-3">
               {/* Student Name */}
               <div className="flex items-start justify-between gap-2">
-                <h3 className="font-semibold text-gray-900 text-sm xs:text-base">
+                <Link
+                  href={`/admin/students/${student.id}`}
+                  className="font-semibold text-gray-900 hover:text-indigo-600 text-sm xs:text-base"
+                >
                   {student.fullName}
-                </h3>
+                </Link>
                 {student.age && (
                   <span className="text-xs xs:text-sm text-gray-600 whitespace-nowrap">
                     {student.age} ani
@@ -243,10 +257,16 @@ export default function StudentsTable({ students, groups }) {
 
               {/* Action Buttons */}
               <div className="flex gap-2">
+                <Link
+                  href={`/admin/students/${student.id}`}
+                  className="flex-1 px-3 xs:px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm xs:text-base font-medium hover:bg-indigo-700 transition-colors text-center"
+                >
+                  Detalii
+                </Link>
                 <PermissionGate permission="students.edit">
                   <Link
-                    href={`/admin/students/${student.id}`}
-                    className="flex-1 px-3 xs:px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm xs:text-base font-medium hover:bg-indigo-700 transition-colors text-center"
+                    href={`/admin/students/${student.id}/edit`}
+                    className="px-3 xs:px-4 py-2 bg-gray-200 text-gray-800 rounded-lg text-sm xs:text-base font-medium hover:bg-gray-300 transition-colors"
                   >
                     Editează
                   </Link>

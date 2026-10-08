@@ -22,7 +22,7 @@ export async function POST(request) {
     const { type, stepUpToken, filters = {} } = body
     
     // Validate export type
-    const validTypes = ['students', 'enrollments', 'users', 'audit_logs', 'payments']
+    const validTypes = ['students', 'users', 'audit_logs', 'payments']
     if (!type || !validTypes.includes(type)) {
       return apiError('Invalid export type', 400)
     }
@@ -61,19 +61,10 @@ export async function POST(request) {
           include: {
             groupStudents: {
               include: {
-                group: {
-                  include: { course: true }
-                }
+                group: true
               }
             }
           }
-        })
-        count = data.length
-        break
-        
-      case 'enrollments':
-        data = await prisma.enrollment.findMany({
-          include: { course: true }
         })
         count = data.length
         break

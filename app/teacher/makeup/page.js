@@ -92,7 +92,7 @@ export default function MakeupLessonsPage() {
           groups[gs.groupId] = {
             groupId: gs.groupId,
             groupName: gs.group?.name,
-            courseName: gs.group?.course?.title,
+            levelName: gs.group?.level,
             students: []
           }
         }
@@ -154,7 +154,7 @@ export default function MakeupLessonsPage() {
           scheduleForDay.push({
             id: group.id,
             name: group.name,
-            course: group.course?.title,
+            level: group.level,
             time: time || '--:--',
             branch: group.branch?.name,
             locationDetails: group.locationDetails,
@@ -179,7 +179,7 @@ export default function MakeupLessonsPage() {
           scheduleForDay.push({
             id: makeup.id,
             name: makeup.group?.name || 'Recuperare',
-            course: 'Recuperare',
+            level: 'Recuperare',
             time: `${hours}:${minutes}`,
             branch: makeup.branch?.name,
             locationDetails: makeup.locationDetails,
@@ -403,7 +403,7 @@ export default function MakeupLessonsPage() {
                         )}
                       </div>
                       <span className="text-xs sm:text-sm text-gray-500 block truncate">
-                        {makeup.group?.course?.title}
+                        {makeup.group?.level}
                       </span>
                       <p className="text-xs sm:text-sm text-amber-600 mt-1 font-medium flex items-center gap-1">
                         <CalendarDaysIcon className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
@@ -503,7 +503,7 @@ export default function MakeupLessonsPage() {
                     </div>
                     <div className="min-w-0">
                       <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">{group.groupName}</h3>
-                      <p className="text-xs sm:text-sm text-gray-500 truncate">{group.courseName}</p>
+                      <p className="text-xs sm:text-sm text-gray-500 truncate">{group.levelName}</p>
                     </div>
                   </div>
                   <button

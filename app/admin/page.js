@@ -1,9 +1,13 @@
 export const dynamic = 'force-dynamic'
 
+import { Suspense } from 'react'
 import prisma from '@/lib/prisma'
 import Link from 'next/link'
 import Image from 'next/image'
-import { checkPermission } from '@/lib/permissions'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import AdminLoading from './loading'
+import { getSource } from '@/lib/leads-config'
 import { 
   AcademicCapIcon, 
   UserGroupIcon, 
@@ -12,70 +16,48 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ChartBarIcon,
-  BookOpenIcon,
-  ClipboardDocumentListIcon,
   UsersIcon,
-  RectangleStackIcon,
   ChatBubbleLeftRightIcon,
   CalendarDaysIcon,
   LockClosedIcon
 } from '@heroicons/react/24/outline'
 
-export default async function AdminDashboard() {
-  // Check permissions for each section
-  const [
-    canViewCourses,
-    canViewEnrollments,
-    canViewStudents,
-    canViewGroups,
-    canViewTeachers,
-    canViewContact,
-    canViewMissedSessions
-  ] = await Promise.all([
-    checkPermission('courses.view'),
-    checkPermission('inscrieri.view'),
-    checkPermission('students.view'),
-    checkPermission('groups.view'),
-    checkPermission('teachers.view'),
-    checkPermission('contact.view'),
-    checkPermission('missed-sessions.view')
-  ])
+async function AdminDashboardContent() {
+  // Read session once — permissions are embedded in the JWT, no extra DB call needed
+  const session = await getServerSession(authOptions)
+  const isSuperAdmin = session?.user?.role === 'SUPERADMIN'
+  const perms = Array.isArray(session?.user?.permissions) ? session.user.permissions : []
+  const has = (p) => isSuperAdmin || perms.includes(p)
 
-  // Only fetch data user has permission to see
+  const canViewStudents   = { allowed: has('students.view') }
+  const canViewGroups     = { allowed: has('groups.view') }
+  const canViewTeachers   = { allowed: has('teachers.view') }
+  const canViewLeads      = { allowed: has('leads.view') }
+  const canViewMissedSessions = { allowed: has('missed-sessions.view') }
+
+  // All data queries in a SINGLE parallel batch — no sequential round-trips
   const [
-    coursesCount, 
-    enrollmentsCount, 
-    studentsCount, 
-    groupsCount, 
-    newEnrollments, 
-    teachers, 
-    unreadMessages, 
+    studentsCount,
+    groupsCount,
+    teachers,
+    newLeads,
     unacknowledgedMissedSessions
   ] = await Promise.all([
-    canViewCourses.allowed ? prisma.course.count() : 0,
-    canViewEnrollments.allowed ? prisma.enrollment.count() : 0,
     canViewStudents.allowed ? prisma.student.count() : 0,
     canViewGroups.allowed ? prisma.group.count() : 0,
-    canViewEnrollments.allowed ? prisma.enrollment.findMany({
-      where: { status: 'NEW' },
-      take: 5,
-      orderBy: { createdAt: 'desc' },
-      include: { course: true }
-    }) : [],
     canViewTeachers.allowed ? prisma.user.findMany({
       where: { role: 'TEACHER', active: true },
       include: {
         teacherGroups: {
           where: { active: true },
           include: {
-            course: true,
             groupStudents: true
           }
         }
       }
     }) : [],
-    canViewContact.allowed ? prisma.contactMessage.findMany({
-      where: { status: 'NOU' },
+    canViewLeads.allowed ? prisma.lead.findMany({
+      where: { status: { in: ['LEAD', 'FARA_RASPUNS'] } },
       take: 5,
       orderBy: { createdAt: 'desc' }
     }) : [],
@@ -85,10 +67,7 @@ export default async function AdminDashboard() {
       orderBy: { scheduledDate: 'desc' },
       include: {
         group: { 
-          include: { 
-            course: true,
-            teacher: true
-          } 
+          include: { teacher: true } 
         }
       }
     }) : []
@@ -140,12 +119,6 @@ export default async function AdminDashboard() {
 
   // Build stats array based on permissions
   const stats = []
-  if (canViewCourses.allowed) {
-    stats.push({ name: 'Cursuri', value: coursesCount, color: 'bg-blue-500', Icon: BookOpenIcon, href: '/admin/courses' })
-  }
-  if (canViewEnrollments.allowed) {
-    stats.push({ name: 'Înscrieri', value: enrollmentsCount, color: 'bg-green-500', Icon: ClipboardDocumentListIcon, href: '/admin/enrollments' })
-  }
   if (canViewStudents.allowed) {
     stats.push({ name: 'Elevi', value: studentsCount, color: 'bg-purple-500', Icon: AcademicCapIcon, href: '/admin/students' })
   }
@@ -154,15 +127,14 @@ export default async function AdminDashboard() {
   }
 
   // Check if user has any permissions at all
-  const hasAnyPermission = canViewCourses.allowed || canViewEnrollments.allowed || 
-    canViewStudents.allowed || canViewGroups.allowed || canViewTeachers.allowed || 
-    canViewContact.allowed || canViewMissedSessions.allowed
+  const hasAnyPermission = canViewStudents.allowed || canViewGroups.allowed ||
+    canViewTeachers.allowed || canViewLeads.allowed || canViewMissedSessions.allowed
 
   return (
     <div className="space-y-5 xs:space-y-6 md:space-y-8">
       <div>
         <h1 className="text-lg xs:text-xl md:text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 text-xs xs:text-sm md:text-base">Bine ai venit în panoul de administrare PISchool!</p>
+        <p className="text-gray-600 text-xs xs:text-sm md:text-base">Bine ai venit în panoul de administrare PI School!</p>
       </div>
 
       {!hasAnyPermission && (
@@ -244,50 +216,52 @@ export default async function AdminDashboard() {
       )}
 
       {/* Contact Messages & Missed Sessions Row - only show if user has permission for either */}
-      {(canViewContact.allowed || canViewMissedSessions.allowed) && (
+      {(canViewLeads.allowed || canViewMissedSessions.allowed) && (
         <div className={`grid gap-4 xs:gap-5 md:gap-6 ${
-          canViewContact.allowed && canViewMissedSessions.allowed 
+          canViewLeads.allowed && canViewMissedSessions.allowed 
             ? 'grid-cols-1 lg:grid-cols-2' 
             : 'grid-cols-1'
         }`}>
           {/* Contact Messages */}
-          {canViewContact.allowed && (
+          {canViewLeads.allowed && (
             <div className="bg-white rounded-xl xs:rounded-2xl shadow-sm border border-gray-100">
               <div className="px-3 xs:px-4 md:px-6 py-3 xs:py-4 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ChatBubbleLeftRightIcon className="w-4 h-4 xs:w-5 xs:h-5 text-indigo-600" />
-                  <h2 className="text-base xs:text-lg font-semibold text-gray-900">Mesaje Contact</h2>
-                  {unreadMessages.length > 0 && (
+                  <h2 className="text-base xs:text-lg font-semibold text-gray-900">Leads de contactat</h2>
+                  {newLeads.length > 0 && (
                     <span className="inline-flex items-center px-1.5 xs:px-2 py-0.5 rounded-full text-[10px] xs:text-xs font-medium bg-red-100 text-red-800">
-                      {unreadMessages.length}
+                      {newLeads.length}
                     </span>
                   )}
                 </div>
-                <Link href="/admin/contact" className="text-xs xs:text-sm text-indigo-600 hover:text-indigo-700 font-medium">
+                <Link href="/admin/leads" className="text-xs xs:text-sm text-indigo-600 hover:text-indigo-700 font-medium">
                   Vezi toate →
                 </Link>
               </div>
               <div className="divide-y divide-gray-100">
-                {unreadMessages.length === 0 ? (
+                {newLeads.length === 0 ? (
                   <div className="px-3 xs:px-4 md:px-6 py-6 xs:py-8 text-center text-gray-500 text-xs xs:text-sm">
-                    Nu există mesaje necitite
+                    Niciun lead care așteaptă contactare
                   </div>
                 ) : (
-                  unreadMessages.map((message) => (
-                    <Link 
-                      key={message.id} 
-                      href={`/admin/contact/${message.id}`}
+                  newLeads.map((lead) => (
+                    <Link
+                      key={lead.id}
+                      href={`/admin/leads/${lead.id}`}
                       className="block px-3 xs:px-4 md:px-6 py-3 xs:py-4 hover:bg-gray-50"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium text-gray-900 text-sm xs:text-base truncate">{message.name}</p>
-                          <p className="text-xs xs:text-sm text-gray-500 truncate">{message.subject || 'Fără subiect'}</p>
-                          <p className="text-[10px] xs:text-xs text-gray-400 mt-1 line-clamp-1">{message.message}</p>
+                          <p className="font-medium text-gray-900 text-sm xs:text-base truncate">{lead.name}</p>
+                          <p className="text-xs xs:text-sm text-gray-500 truncate">{lead.phone || lead.email || 'Fără contact'}</p>
+                          {lead.message && (
+                            <p className="text-[10px] xs:text-xs text-gray-400 mt-1 line-clamp-1">{lead.message}</p>
+                          )}
                         </div>
                         <div className="flex-shrink-0">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] xs:text-xs font-medium bg-blue-100 text-blue-800">
-                            NOU
+                            {getSource(lead.source).emoji} {getSource(lead.source).label}
                           </span>
                         </div>
                       </div>
@@ -493,45 +467,14 @@ export default async function AdminDashboard() {
       </div>
       )}
 
-      {/* Recent Enrollments - only if can view enrollments */}
-      {canViewEnrollments.allowed && (
-        <div className="bg-white rounded-xl xs:rounded-2xl shadow-sm border border-gray-100">
-          <div className="px-3 xs:px-4 md:px-6 py-3 xs:py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-base xs:text-lg font-semibold text-gray-900">Înscrieri noi</h2>
-            <Link href="/admin/enrollments" className="text-xs xs:text-sm text-indigo-600 hover:text-indigo-700 font-medium">
-              Vezi toate →
-            </Link>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {newEnrollments.length === 0 ? (
-              <div className="px-3 xs:px-4 md:px-6 py-6 xs:py-8 text-center text-gray-500 text-xs xs:text-sm">
-                Nu există înscrieri noi
-              </div>
-            ) : (
-              newEnrollments.map((enrollment) => (
-                <Link key={enrollment.id} href={`/admin/enrollments/${enrollment.id}`} className="block px-3 xs:px-4 md:px-6 py-3 xs:py-4 hover:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-gray-900 text-sm xs:text-base truncate">{enrollment.studentName}</p>
-                      <p className="text-xs xs:text-sm text-gray-500 truncate">
-                        {enrollment.course?.title} • {enrollment.parentPhone}
-                      </p>
-                    </div>
-                    <div className="text-right ml-2 flex-shrink-0">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] xs:text-xs font-medium bg-yellow-100 text-yellow-800">
-                        NOU
-                      </span>
-                      <p className="text-[10px] xs:text-xs text-gray-400 mt-1">
-                        {new Date(enrollment.createdAt).toLocaleDateString('ro-RO')}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </div>
-      )}
     </div>
+  )
+}
+
+export default function AdminDashboard() {
+  return (
+    <Suspense fallback={<AdminLoading />}>
+      <AdminDashboardContent />
+    </Suspense>
   )
 }

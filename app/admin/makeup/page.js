@@ -592,7 +592,7 @@ export default function AdminMakeupPage() {
                             <ArrowPathIcon className="w-3.5 h-3.5" />
                             Recuperare
                           </span>
-                          <h3 className="font-semibold text-gray-900">{lesson.group?.course?.title}</h3>
+                          <h3 className="font-semibold text-gray-900">{lesson.group?.level}</h3>
                           {getStatusBadge(lesson.status)}
                         </div>
                         <p className="text-sm text-gray-600 mt-1">
@@ -785,7 +785,7 @@ export default function AdminMakeupPage() {
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Elev</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Grupă</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Curs</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nivel</th>
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Profesor</th>
                       <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Absențe</th>
                     </tr>
@@ -807,7 +807,7 @@ export default function AdminMakeupPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">{gs.group?.name}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700">{gs.group?.course?.title}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700">{gs.group?.level}</td>
                         <td className="px-4 py-3 text-sm text-gray-700">{gs.group?.teacher?.name || '-'}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-flex items-center justify-center min-w-[2rem] px-2 py-1 rounded-full text-sm font-bold ${
@@ -865,7 +865,7 @@ export default function AdminMakeupPage() {
                   <option value="">Selectează grupa</option>
                   {groups.map(group => (
                     <option key={group.id} value={group.id}>
-                      {group.name} - {group.course?.title}
+                      {group.name} - {group.level}
                     </option>
                   ))}
                 </select>
@@ -1225,7 +1225,7 @@ export default function AdminMakeupPage() {
                   <option value="">Selectează grupa</option>
                   {groups.map(group => (
                     <option key={group.id} value={group.id}>
-                      {group.name} - {group.course?.title}
+                      {group.name} - {group.level}
                     </option>
                   ))}
                 </select>

@@ -5,9 +5,10 @@ import Image from 'next/image'
 import prisma from '@/lib/prisma'
 import { ChartBarIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
 import DeleteTeacherButton from '@/components/admin/DeleteTeacherButton'
+import ImpersonateButton from '@/components/admin/ImpersonateButton'
 import PermissionGuard from '@/components/admin/PermissionGuard'
-import { checkPermission } from '@/lib/permissions'
-import { getCurrentUser } from '@/lib/session'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 
 export default async function TeachersPage() {
   return (
@@ -18,26 +19,36 @@ export default async function TeachersPage() {
 }
 
 async function TeachersPageContent() {
-  const currentUser = await getCurrentUser()
+  // Read session once — permissions are in the JWT, no DB round-trips needed
+  const session = await getServerSession(authOptions)
+  const currentUser = session?.user
   const userIsSuperAdmin = currentUser?.role === 'SUPERADMIN'
-  
-  const [canCreate, canDelete] = await Promise.all([
-    checkPermission('teachers.create'),
-    checkPermission('teachers.delete')
-  ])
-  
+  const perms = Array.isArray(currentUser?.permissions) ? currentUser.permissions : []
+  const has = (p) => userIsSuperAdmin || perms.includes(p)
+
+  const canCreate     = { allowed: has('teachers.create') }
+  const canDelete     = { allowed: has('teachers.delete') }
+  const canImpersonate = { allowed: has('teachers.impersonate') }
+
+  // SUPERADMIN poate impersona ADMIN și TEACHER; ADMIN cu permisiune doar TEACHER
+  const canImpersonateTarget = (teacherRole) => {
+    if (!teacherRole) return false
+    if (userIsSuperAdmin) return ['ADMIN', 'TEACHER'].includes(teacherRole)
+    if (canImpersonate.allowed) return teacherRole === 'TEACHER'
+    return false
+  }
+
   // Administratorii văd doar profesorii, superadmin vede pe toți
-  const roleFilter = userIsSuperAdmin 
+  const roleFilter = userIsSuperAdmin
     ? { in: ['TEACHER', 'ADMIN'] }
     : { equals: 'TEACHER' }
-  
+
   const teachers = await prisma.user.findMany({
     where: { role: roleFilter },
     orderBy: [{ role: 'asc' }, { createdAt: 'desc' }],
     include: {
       teacherGroups: {
         include: { 
-          course: true,
           groupStudents: true
         }
       }
@@ -192,6 +203,13 @@ async function TeachersPageContent() {
                         <ChartBarIcon className="w-4 h-4" />
                         Statistici
                       </Link>
+                      {teacher.id !== currentUser?.id && teacher.active && canImpersonateTarget(teacher.role) && (
+                        <ImpersonateButton
+                          userId={teacher.id}
+                          userName={teacher.name || teacher.email}
+                          userRole={teacher.role}
+                        />
+                      )}
                       {canDelete.allowed && (userIsSuperAdmin || teacher.role === 'TEACHER') && (
                         <DeleteTeacherButton id={teacher.id} name={teacher.name || teacher.email} />
                       )}
@@ -271,7 +289,7 @@ async function TeachersPageContent() {
               )}
 
               {/* Action Buttons */}
-              <div className="flex gap-1.5 xs:gap-2">
+              <div className="flex gap-1.5 xs:gap-2 flex-wrap">
                 <Link
                   href={`/admin/teachers/${teacher.id}`}
                   className="flex-1 flex items-center justify-center gap-1 xs:gap-1.5 px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 bg-indigo-600 text-white rounded-lg text-[10px] xs:text-xs sm:text-sm font-medium hover:bg-indigo-700 transition-colors"
@@ -279,6 +297,14 @@ async function TeachersPageContent() {
                   <ChartBarIcon className="w-3 h-3 xs:w-4 xs:h-4" />
                   <span>Statistici</span>
                 </Link>
+                {teacher.id !== currentUser?.id && teacher.active && canImpersonateTarget(teacher.role) && (
+                  <ImpersonateButton
+                    userId={teacher.id}
+                    userName={teacher.name || teacher.email}
+                    userRole={teacher.role}
+                    className="flex-1 flex items-center justify-center gap-1 xs:gap-1.5 px-2 xs:px-3 sm:px-4 py-1.5 xs:py-2 bg-amber-500 text-white rounded-lg text-[10px] xs:text-xs sm:text-sm font-medium hover:bg-amber-600 transition-colors"
+                  />
+                )}
                 {canDelete.allowed && (userIsSuperAdmin || teacher.role === 'TEACHER') && (
                   <DeleteTeacherButton 
                     id={teacher.id} 

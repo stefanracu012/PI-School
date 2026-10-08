@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyCancelledLesson } from '@/lib/telegram'
+import { syncMakeupSalary, removeSourceSalary } from '@/lib/salary'
 
 // GET - Fetch a specific makeup lesson with students
 export async function GET(request, { params }) {
@@ -25,7 +26,6 @@ export async function GET(request, { params }) {
         },
         group: {
           include: { 
-            course: true,
             groupStudents: {
               include: {
                 student: true
@@ -81,7 +81,7 @@ export async function PATCH(request, { params }) {
           include: { student: true }
         },
         group: {
-          include: { course: true, teacher: true }
+          include: { teacher: true }
         }
       }
     })
@@ -140,7 +140,7 @@ export async function PATCH(request, { params }) {
         data: { status: 'IN_PROGRESS' },
         include: {
           students: { include: { student: true } },
-          group: { include: { course: true } }
+          group: { include: {} }
         }
       })
       return NextResponse.json(updatedMakeup)
@@ -158,7 +158,7 @@ export async function PATCH(request, { params }) {
         await notifyCancelledLesson(
           makeupLesson.group.name,
           cancelledBy,
-          makeupLesson.group.course?.title || 'N/A',
+          makeupLesson.group.level || 'N/A',
           scheduledTime,
           true,
           studentNames
@@ -194,7 +194,7 @@ export async function PATCH(request, { params }) {
         data: { status: 'CANCELED' },
         include: {
           students: { include: { student: true } },
-          group: { include: { course: true } }
+          group: { include: {} }
         }
       })
       return NextResponse.json(updatedMakeup)
@@ -234,7 +234,7 @@ export async function PATCH(request, { params }) {
             })
             
             const updateData = {
-              lessonsRemaining: { decrement: 1 }
+              // contorul individual nu mai e folosit
             }
             
             // Only decrement absences if student has absences > 0
@@ -265,9 +265,12 @@ export async function PATCH(request, { params }) {
         },
         include: {
           students: { include: { student: true } },
-          group: { include: { course: true } }
+          group: { include: {} }
         }
       })
+
+      // Recuperarea ținută intră în salariul profesorului, după regula grupei
+      await syncMakeupSalary(id)
 
       // ============================================
       // CREATE REAL-TIME NOTIFICATIONS FOR LOW/ZERO/NEGATIVE LESSONS
@@ -282,7 +285,6 @@ export async function PATCH(request, { params }) {
           student: true,
           group: {
             include: {
-              course: { select: { title: true } }
             }
           }
         }
@@ -303,7 +305,7 @@ export async function PATCH(request, { params }) {
         } else {
           type = 'LOW_LESSONS'
           title = `📉 ${gs.student.fullName} are doar ${lessons} lecții`
-          message = `Elevul ${gs.student.fullName} din grupa "${gs.group.name}" (${gs.group.course.title}) mai are doar ${lessons} lecții.`
+          message = `Elevul ${gs.student.fullName} din grupa "${gs.group.name}" (${gs.group.level}) mai are doar ${lessons} lecții.`
         }
 
         // Check if similar notification exists in last 24 hours
@@ -331,7 +333,7 @@ export async function PATCH(request, { params }) {
               data: { 
                 lessonsRemaining: lessons,
                 groupName: gs.group.name,
-                courseName: gs.group.course.title
+                levelName: gs.group.level
               }
             }
           })
@@ -385,7 +387,7 @@ export async function PATCH(request, { params }) {
         where: { id },
         include: {
           students: { include: { student: true } },
-          group: { include: { course: true } }
+          group: { include: {} }
         }
       })
 
@@ -409,7 +411,7 @@ export async function PATCH(request, { params }) {
         where: { id },
         include: {
           students: { include: { student: true } },
-          group: { include: { course: true } }
+          group: { include: {} }
         }
       })
 
@@ -437,7 +439,7 @@ export async function PATCH(request, { params }) {
         where: { id },
         include: {
           students: { include: { student: true } },
-          group: { include: { course: true } }
+          group: { include: {} }
         }
       })
 
@@ -454,7 +456,7 @@ export async function PATCH(request, { params }) {
       data: updateData,
       include: {
         students: { include: { student: true } },
-        group: { include: { course: true } }
+        group: { include: {} }
       }
     })
 
@@ -481,7 +483,7 @@ export async function DELETE(request, { params }) {
       where: { id },
       include: {
         students: { include: { student: true } },
-        group: { include: { course: true, teacher: true } }
+        group: { include: { teacher: true } }
       }
     })
 
@@ -494,13 +496,16 @@ export async function DELETE(request, { params }) {
 
     // Trimite notificare Telegram
     await notifyCancelledLesson(
-      makeupLesson.group?.name,
-      makeupLesson.group?.teacher?.name ?? 'Fără profesor',
-      makeupLesson.group?.course?.title || 'N/A',
+      makeupLesson.group.name,
+      makeupLesson.group.teacher.name,
+      makeupLesson.group.level || 'N/A',
       scheduledTime,
       true,
       studentNames
     )
+
+    // O recuperare ținută și ștearsă apoi iese și din salariu
+    await removeSourceSalary({ makeupId: id }, session.user.name)
 
     // Delete all students first (cascade should handle this, but being explicit)
     await prisma.makeupLessonStudent.deleteMany({

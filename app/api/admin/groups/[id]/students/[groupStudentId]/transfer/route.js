@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { syncLeadForStudent } from '@/lib/student-leads'
 import prisma from '@/lib/prisma'
 import { requireAdmin } from '@/lib/session'
 import { checkPermission } from '@/lib/permissions'
@@ -7,13 +8,13 @@ import { notifyTeacherNewStudent, notifyTeacherStudentRemoved } from '@/lib/tele
 export async function POST(request, { params }) {
   try {
     await requireAdmin()
-    
+
     // Check permission
     const permCheck = await checkPermission('groups.students.transfer')
     if (!permCheck.allowed) {
       return NextResponse.json({ error: 'Nu ai permisiunea să transferi elevi' }, { status: 403 })
     }
-    
+
     const { id: groupId, groupStudentId } = await params
     const { targetGroupId, transferLessons, transferAbsences } = await request.json()
 
@@ -36,7 +37,7 @@ export async function POST(request, { params }) {
     // Verifică că elevul este în grupa sursă
     const groupStudent = await prisma.groupStudent.findUnique({
       where: { id: groupStudentId },
-      include: { 
+      include: {
         student: {
           select: { fullName: true, parentPhone: true, parentEmail: true }
         }
@@ -52,7 +53,6 @@ export async function POST(request, { params }) {
       where: { id: targetGroupId },
       include: {
         teacher: { select: { telegramChatId: true, name: true } },
-        course: { select: { title: true } },
         branch: { select: { name: true } }
       }
     })
@@ -142,12 +142,12 @@ export async function POST(request, { params }) {
           scheduleTime = Object.entries(times).map(([day, time]) => `${day} ${time}`).join(', ')
         } catch {}
       }
-      
+
       await notifyTeacherNewStudent({
         teacherChatId: targetGroup.teacher.telegramChatId,
         studentName: groupStudent.student.fullName,
         groupName: targetGroup.name,
-        courseName: targetGroup.course?.title || 'Curs',
+        levelName: targetGroup.level || 'Fără nivel',
         scheduleDays,
         scheduleTime,
         branchName: targetGroup.branch?.name,
@@ -159,8 +159,8 @@ export async function POST(request, { params }) {
       })
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       message: `${groupStudent.student.fullName} a fost transferat în ${targetGroup.name}`,
       newGroupStudentId: newGroupStudent.id
     })
@@ -170,6 +170,9 @@ export async function POST(request, { params }) {
     if (error.message === 'Unauthorized' || error.message === 'Forbidden') {
       return NextResponse.json({ error: error.message }, { status: 401 })
     }
+    // Elevul își are lead-ul lui; statusul urmează grupele (Studiază / Waitlist)
+    syncLeadForStudent(groupStudent.studentId).catch(() => {})
+
     return NextResponse.json({ error: 'Eroare la transferul elevului' }, { status: 500 })
   }
 }

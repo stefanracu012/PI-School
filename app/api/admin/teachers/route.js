@@ -48,7 +48,7 @@ export async function POST(request) {
       }, { status: 403 })
     }
 
-    const { name, email, phone, telegramChatId, password, active, twoFactorAllowed, role, permissions } = body
+    const { name, email, phone, telegramChatId, password, active, twoFactorAllowed, superTeacher, canViewAllSchedules, role, permissions } = body
 
     // Doar SUPERADMIN poate crea ADMIN
     const allowedRoles = ['TEACHER']
@@ -66,8 +66,11 @@ export async function POST(request) {
 
     const hashedPassword = password ? await hashPassword(password) : null
 
-    // Only store permissions for ADMIN
-    const finalPermissions = (finalRole === 'TEACHER') ? [] : (Array.isArray(permissions) ? permissions : [])
+    // Profesorii pot avea și ei drepturi, dar numai pe acțiunile lor
+    const requested = Array.isArray(permissions) ? permissions : []
+    const finalPermissions = finalRole === 'TEACHER'
+      ? requested.filter((k) => k.startsWith('teacher.'))
+      : requested
 
     const teacher = await prisma.user.create({
       data: {
@@ -79,7 +82,9 @@ export async function POST(request) {
         role: finalRole,
         permissions: finalPermissions,
         active: active ?? true,
-        twoFactorAllowed: twoFactorAllowed ?? false
+        twoFactorAllowed: twoFactorAllowed ?? false,
+        superTeacher: !!superTeacher && finalRole === 'TEACHER',
+        canViewAllSchedules: !!canViewAllSchedules && finalRole === 'TEACHER'
       }
     })
 

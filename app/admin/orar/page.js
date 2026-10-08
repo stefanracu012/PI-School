@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -41,6 +41,18 @@ const getTimeForDay = (scheduleTime, day) => {
   return null
 }
 
+// Culoare stabilă per grupă, ca aceeași grupă să arate la fel în toată grila
+const GROUP_COLORS = [
+  '#dbeafe', '#dcfce7', '#fef3c7', '#fee2e2', '#ede9fe',
+  '#cffafe', '#fce7f3', '#e0e7ff', '#d1fae5', '#ffedd5',
+]
+
+function groupColor(name) {
+  let hash = 0
+  for (let i = 0; i < (name || '').length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 997
+  return GROUP_COLORS[hash % GROUP_COLORS.length]
+}
+
 export default function OrarPage() {
   const router = useRouter()
   const { hasPermission, isSuperAdmin } = usePermissions()
@@ -50,6 +62,7 @@ export default function OrarPage() {
   const [teachers, setTeachers] = useState([])
   const [makeupLessons, setMakeupLessons] = useState([])
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState('list') // 'list' | 'grid'
   
   // Filtre
   const [selectedBranch, setSelectedBranch] = useState('')
@@ -70,7 +83,9 @@ export default function OrarPage() {
 
   const fetchData = async () => {
     try {
-      const res = await fetch('/api/admin/groups')
+      // Orarul are nevoie de toate grupele în curs, nu de prima pagină de 20:
+      // altfel lipsesc din orar grupe care chiar au lecții.
+      const res = await fetch('/api/admin/groups?all=true')
       const data = await res.json()
       setGroups(data.groups || [])
       setBranches(data.branches || [])
@@ -143,7 +158,7 @@ export default function OrarPage() {
             teacherPhone: group.teacher?.phone || null,
             room: group.locationDetails || '-',
             locationType: group.locationType,
-            course: group.course?.title || '-',
+            level: group.level || '-',
             studentCount: group.groupStudents?.length || 0
           })
         }
@@ -211,7 +226,7 @@ export default function OrarPage() {
           teacherPhone: makeup.teacher?.phone || null,
           room: makeup.locationDetails || '-',
           locationType: 'offline',
-          course: makeup.group?.name ? 'Lecție de recuperare' : '-',
+          level: makeup.group?.name ? 'Lecție de recuperare' : '-',
           studentCount: makeup.students?.length || 0,
           isMakeup: true,
           makeupDate: dateStr,
@@ -250,12 +265,39 @@ export default function OrarPage() {
   // Calculează statistici
   const totalLessons = schedule.sortedDays.reduce((sum, day) => sum + schedule.scheduleByDay[day].length, 0)
 
+  // Grila are atâtea rânduri câte lecții are ziua cea mai încărcată
+  const gridRowCount = schedule.sortedDays.reduce(
+    (max, day) => Math.max(max, schedule.scheduleByDay[day].length), 0
+  )
+
   return (
     <div className="space-y-4 xs:space-y-6">
       <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-3 xs:gap-0">
         <div>
           <h1 className="text-xl xs:text-2xl font-bold text-gray-900">Orar</h1>
           <p className="text-sm xs:text-base text-gray-600">Vizualizează orarul tuturor grupelor</p>
+        </div>
+
+        {/* Aceleași date, două forme: listă pe zile sau tabel săptămânal */}
+        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden self-start">
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+              viewMode === 'list' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            Listă
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('grid')}
+            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+              viewMode === 'grid' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            Tabel săptămânal
+          </button>
         </div>
       </div>
         
@@ -347,8 +389,75 @@ export default function OrarPage() {
         )}
       </div>
 
+      {/* Tabel săptămânal, în forma folosită pe hârtie: TIME | ZI, pentru fiecare zi */}
+      {viewMode === 'grid' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+          <table className="min-w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                {schedule.sortedDays.map((day) => (
+                  <th key={day} colSpan={2} className={`px-2 py-2 border border-gray-200 text-center text-xs font-bold uppercase tracking-wide ${
+                    day === schedule.todayName ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {day}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                {schedule.sortedDays.map((day) => (
+                  <Fragment key={`h-${day}`}>
+                    <th className="px-2 py-1 border border-gray-200 bg-gray-50 text-[10px] font-medium text-gray-500 uppercase">Ora</th>
+                    <th className="px-2 py-1 border border-gray-200 bg-gray-50 text-[10px] font-medium text-gray-500 uppercase">Grupa</th>
+                  </Fragment>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: gridRowCount }, (_, row) => (
+                <tr key={row}>
+                  {schedule.sortedDays.map((day) => {
+                    const item = schedule.scheduleByDay[day][row]
+                    if (!item) {
+                      return (
+                        <Fragment key={`${day}-${row}`}>
+                          <td className="border border-gray-200 px-2 py-1.5" />
+                          <td className="border border-gray-200 px-2 py-1.5" />
+                        </Fragment>
+                      )
+                    }
+                    return (
+                      <Fragment key={`${day}-${row}`}>
+                        <td className="border border-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-800 whitespace-nowrap text-center">
+                          {item.time}
+                        </td>
+                        <td
+                          className="border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-900 whitespace-nowrap"
+                          style={{ backgroundColor: groupColor(item.name) }}
+                          title={`${item.name} · ${item.teacherName} · ${item.room}`}
+                        >
+                          {item.name}
+                          {item.isMakeup && <span className="ml-1 text-[10px] text-amber-700">(rec.)</span>}
+                          <span className="block text-[10px] font-normal text-gray-600">
+                            {item.teacherName}
+                            {item.studentCount ? ` · ${item.studentCount} elevi` : ''}
+                          </span>
+                        </td>
+                      </Fragment>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {gridRowCount === 0 && (
+            <p className="p-6 text-center text-sm text-gray-500">Nicio lecție programată.</p>
+          )}
+        </div>
+      )}
+
       {/* Orar pe zile */}
-      <div className="space-y-6">
+      <div className={viewMode === 'grid' ? 'hidden' : 'space-y-6'}>
         {schedule.sortedDays.map((day) => {
           const daySchedule = schedule.scheduleByDay[day]
           const isToday = day === schedule.todayName
@@ -415,7 +524,7 @@ export default function OrarPage() {
 
                     {/* Numele grupei */}
                     <h3 className="font-semibold text-gray-900 mb-1">{item.name}</h3>
-                    <p className="text-xs text-gray-500 mb-3">{item.course}</p>
+                    <p className="text-xs text-gray-500 mb-3">{item.level}</p>
 
                     {/* Număr elevi */}
                     {item.studentCount > 0 && (
@@ -441,18 +550,24 @@ export default function OrarPage() {
                         <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                         </svg>
-                        <a href={`mailto:${item.teacherEmail}`} className="text-xs text-indigo-600 hover:underline truncate">
+                        <span
+                          className="text-xs text-indigo-600 hover:underline truncate cursor-pointer"
+                          onClick={e => { e.preventDefault(); e.stopPropagation(); window.location.href = `mailto:${item.teacherEmail}` }}
+                        >
                           {item.teacherEmail}
-                        </a>
+                        </span>
                       </div>
                       {item.teacherPhone && (
                         <div className="flex items-center gap-2">
                           <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                           </svg>
-                          <a href={`tel:${item.teacherPhone}`} className="text-xs text-indigo-600 hover:underline">
+                          <span
+                            className="text-xs text-indigo-600 hover:underline cursor-pointer"
+                            onClick={e => { e.preventDefault(); e.stopPropagation(); window.location.href = `tel:${item.teacherPhone}` }}
+                          >
                             {item.teacherPhone}
-                          </a>
+                          </span>
                         </div>
                       )}
                     </div>

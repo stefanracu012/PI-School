@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
+import { syncLeadForStudent } from '@/lib/student-leads'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { notifyTeacherActivity } from '@/lib/telegram'
 
 // POST - Add student to teacher's group
 export async function POST(request, { params }) {
   const session = await getServerSession(authOptions)
-  
+
   if (!session || !['TEACHER', 'ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -43,7 +45,7 @@ export async function POST(request, { params }) {
     }
 
     // Check if teacher has access to this student (created by them or in their groups)
-    const hasAccess = student.createdById === session.user.id || 
+    const hasAccess = student.createdById === session.user.id ||
       await prisma.groupStudent.findFirst({
         where: {
           studentId: studentId,
@@ -82,11 +84,21 @@ export async function POST(request, { params }) {
         student: true,
         group: {
           include: {
-            course: { select: { title: true } }
           }
         }
       }
     })
+
+    // Notificare Telegram - Thread Activități Profesori
+    const details = `👤 Elev: <b>${groupStudent.student.fullName}</b>
+📚 Grupa: ${groupStudent.group.name}
+📘 Nivel: ${groupStudent.group.level || 'N/A'}
+➕ Adăugat în grupă`
+    notifyTeacherActivity('student_group', session.user.name || session.user.email, details)
+      .catch(err => console.error('Telegram notification error:', err))
+
+    // Elevul își are lead-ul lui; statusul urmează grupele (Studiază / Waitlist)
+    syncLeadForStudent(groupStudent.studentId).catch(() => {})
 
     return NextResponse.json(groupStudent, { status: 201 })
   } catch (error) {
@@ -98,7 +110,7 @@ export async function POST(request, { params }) {
 // DELETE - Remove student from teacher's group
 export async function DELETE(request, { params }) {
   const session = await getServerSession(authOptions)
-  
+
   if (!session || !['TEACHER', 'ADMIN', 'SUPERADMIN'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -143,6 +155,9 @@ export async function DELETE(request, { params }) {
     await prisma.groupStudent.delete({
       where: { id: groupStudent.id }
     })
+
+    // Elevul își are lead-ul lui; statusul urmează grupele (Studiază / Waitlist)
+    syncLeadForStudent(studentId).catch(() => {})
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { NOT_COMPLETED } from '@/lib/group-filters'
 
 // GET - Fetch all students for a teacher's groups with detailed info
 export async function GET(request) {
@@ -14,9 +15,8 @@ export async function GET(request) {
   try {
     // Get all groups for this teacher
     const groups = await prisma.group.findMany({
-      where: { teacherId: session.user.id },
+      where: { teacherId: session.user.id, ...NOT_COMPLETED },
       include: {
-        course: true,
         groupStudents: {
           include: {
             student: true
@@ -43,6 +43,13 @@ export async function GET(request) {
             id: studentId,
             name: gs.student.fullName,
             age: gs.student.age,
+            isAdult: gs.student.isAdult,
+            level: gs.student.level,
+            // Pagina decide din ele dacă are rost să arate „Editează"
+            createdAt: gs.student.createdAt,
+            createdById: gs.student.createdById,
+            startYear: gs.student.startYear,
+            startMonth: gs.student.startMonth,
             parentName: gs.student.parentName,
             parentPhone: gs.student.parentPhone,
             parentEmail: gs.student.parentEmail,
@@ -62,15 +69,24 @@ export async function GET(request) {
         let presentCount = 0
         let absentCount = 0
         let totalGroupSessions = 0
+        // Luna curentă — la grupele lunare asta contează, nu un pachet per elev
+        let monthPresent = 0
+        let monthAbsent = 0
+        const now = new Date()
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
 
         for (const groupSession of group.lessonSessions) {
           const attendance = groupSession.attendances.find(a => a.studentId === studentId)
           if (attendance) {
             totalGroupSessions++
+            const inMonth = groupSession.date >= monthStart && groupSession.date < nextMonth
             if (attendance.status === 'PRESENT') {
               presentCount++
+              if (inMonth) monthPresent++
             } else {
               absentCount++
+              if (inMonth) monthAbsent++
             }
           }
         }
@@ -86,9 +102,12 @@ export async function GET(request) {
           groupStudentId: gs.id,
           groupId: group.id,
           groupName: group.name,
-          courseName: group.course.title,
+          levelName: group.level,
           schedule: scheduleText,
+          billingType: group.billingType || 'MONTHLY',
           remainingLessons: Math.max(0, gs.lessonsRemaining || 0),
+          monthPresent,
+          monthAbsent,
           absences: Math.max(0, gs.absences || 0),
           status: studentStatus,
           statusNote: gs.statusNote,
@@ -125,6 +144,12 @@ export async function GET(request) {
           id: student.id,
           name: student.fullName,
           age: student.age,
+          isAdult: student.isAdult,
+          level: student.level,
+          createdAt: student.createdAt,
+          createdById: student.createdById,
+          startYear: student.startYear,
+          startMonth: student.startMonth,
           parentName: student.parentName,
           parentPhone: student.parentPhone,
           parentEmail: student.parentEmail,

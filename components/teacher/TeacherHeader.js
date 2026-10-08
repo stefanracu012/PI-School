@@ -2,10 +2,7 @@
 
 import { signOut } from 'next-auth/react'
 import Image from 'next/image'
-import { 
-  ArrowRightOnRectangleIcon,
-  GlobeAltIcon
-} from '@heroicons/react/24/outline'
+import { ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline'
 import { useState } from 'react'
 import Link from 'next/link'
 import NotificationBell from '@/components/NotificationBell'
@@ -22,11 +19,11 @@ export default function TeacherHeader({ user }) {
             <Image
               src="/pi.png"
               alt="PI School"
-              width={32}
-              height={32}
-              className="object-contain rounded-full"
+              width={882}
+              height={882}
+              className="h-9 w-auto rounded-full shrink-0 object-contain"
             />
-            <span className="font-bold text-gray-800">PI School</span>
+            <span className="text-lg font-bold text-gray-900">PI SCHOOL</span>
           </Link>
 
           {/* Desktop - Back button */}
@@ -41,17 +38,6 @@ export default function TeacherHeader({ user }) {
 
           {/* Right side - Notifications + User menu */}
           <div className="flex items-center gap-2 xs:gap-3">
-            {/* Vezi site-ul */}
-            <Link
-              href="/"
-              target="_blank"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs xs:text-sm text-gray-600 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-              title="Vezi site-ul"
-            >
-              <GlobeAltIcon className="w-4 h-4 xs:w-5 xs:h-5" />
-              <span className="hidden sm:inline">Vezi site-ul</span>
-            </Link>
-
             {/* Notification Bell */}
             <NotificationBell isAdmin={false} />
 

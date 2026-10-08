@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import Link from 'next/link'
 
 // Mapare zi săptămână JS -> română
@@ -36,14 +36,28 @@ const getTimeForDay = (scheduleTime, day) => {
   return null
 }
 
+// Culoare stabilă per grupă, ca aceeași grupă să arate la fel în toată grila
+const GROUP_COLORS = [
+  '#dbeafe', '#dcfce7', '#fef3c7', '#fee2e2', '#ede9fe',
+  '#cffafe', '#fce7f3', '#e0e7ff', '#d1fae5', '#ffedd5',
+]
+
+function groupColor(name) {
+  let hash = 0
+  for (let i = 0; i < (name || '').length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 997
+  return GROUP_COLORS[hash % GROUP_COLORS.length]
+}
+
 export default function TeacherOrarPage() {
   const [groups, setGroups] = useState([])
   const [teachers, setTeachers] = useState([])
   const [branches, setBranches] = useState([])
   const [makeupLessons, setMakeupLessons] = useState([])
   const [currentUserId, setCurrentUserId] = useState(null)
+  const [canViewAll, setCanViewAll] = useState(true)
   const [loading, setLoading] = useState(true)
-  
+  const [viewMode, setViewMode] = useState('list') // 'list' | 'grid'
+
   // Filtre
   const [selectedTeacher, setSelectedTeacher] = useState('')
   const [selectedBranch, setSelectedBranch] = useState('')
@@ -64,6 +78,7 @@ export default function TeacherOrarPage() {
       setBranches(data.branches || [])
       setMakeupLessons(data.makeupLessons || [])
       setCurrentUserId(data.currentUserId)
+      setCanViewAll(data.canViewAll !== false)
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -75,24 +90,24 @@ export default function TeacherOrarPage() {
   const filteredGroups = useMemo(() => {
     return groups.filter(group => {
       if (!group.active) return false
-      
+
       // Filtru "doar ale mele"
       if (showOnlyMine && group.teacherId !== currentUserId) return false
-      
+
       // Filtru profesor
       if (selectedTeacher && group.teacherId !== selectedTeacher) return false
-      
+
       // Filtru filială
       if (selectedBranch) {
         if (selectedBranch === 'none' && group.branchId) return false
         if (selectedBranch !== 'none' && group.branchId !== selectedBranch) return false
       }
-      
+
       // Filtru zi
       if (selectedDay && (!group.scheduleDays || !group.scheduleDays.includes(selectedDay))) {
         return false
       }
-      
+
       return true
     })
   }, [groups, selectedTeacher, selectedBranch, selectedDay, showOnlyMine, currentUserId])
@@ -103,19 +118,19 @@ export default function TeacherOrarPage() {
     const todayName = dayMapping[new Date().getDay()]
     const tomorrowIndex = (new Date().getDay() + 1) % 7
     const tomorrowName = dayMapping[tomorrowIndex]
-    
+
     const scheduleByDay = {}
     sortedDays.forEach(day => {
       scheduleByDay[day] = []
     })
-    
+
     filteredGroups.forEach(group => {
       if (!group.scheduleDays) return
-      
+
       group.scheduleDays.forEach(day => {
         // Dacă e selectată o zi specifică, arătăm doar acea zi
         if (selectedDay && day !== selectedDay) return
-        
+
         if (scheduleByDay[day]) {
           const time = getTimeForDay(group.scheduleTime, day)
           scheduleByDay[day].push({
@@ -126,7 +141,7 @@ export default function TeacherOrarPage() {
             branchId: group.branchId,
             room: group.locationDetails || '-',
             locationType: group.locationType,
-            course: group.course?.title || '-',
+            level: group.level || '-',
             teacher: group.teacher?.name || group.teacher?.email || '-',
             teacherId: group.teacherId,
             studentsCount: group.groupStudents?.filter(gs => gs.status === 'ACTIVE' || !gs.status)?.length || 0,
@@ -136,39 +151,39 @@ export default function TeacherOrarPage() {
         }
       })
     })
-    
+
     // Adaugă lecțiile de recuperare programate
     makeupLessons.forEach(makeup => {
       // Filtru "doar ale mele"
       if (showOnlyMine && makeup.teacherId !== currentUserId) return
-      
+
       // Filtru profesor
       if (selectedTeacher && makeup.teacherId !== selectedTeacher) return
-      
+
       // Filtru filială
       if (selectedBranch) {
         if (selectedBranch === 'none' && makeup.branchId) return
         if (selectedBranch !== 'none' && makeup.branchId !== selectedBranch) return
       }
-      
+
       const scheduledDate = new Date(makeup.scheduledAt)
       const makeupDayName = dayMapping[scheduledDate.getDay()]
-      
+
       // Filtru zi
       if (selectedDay && makeupDayName !== selectedDay) return
-      
+
       // Extrage ora din scheduledAt (care e stocat în UTC)
       const hours = String(scheduledDate.getUTCHours()).padStart(2, '0')
       const minutes = String(scheduledDate.getUTCMinutes()).padStart(2, '0')
       const time = `${hours}:${minutes}`
-      
+
       // Formatează data pentru afișare
       const dateStr = scheduledDate.toLocaleDateString('ro-RO', {
         timeZone: 'UTC',
         day: 'numeric',
         month: 'short'
       })
-      
+
       if (scheduleByDay[makeupDayName]) {
         scheduleByDay[makeupDayName].push({
           id: makeup.id,
@@ -178,7 +193,7 @@ export default function TeacherOrarPage() {
           branchId: makeup.branchId,
           room: makeup.locationDetails || '-',
           locationType: 'offline',
-          course: 'Recuperare',
+          level: 'Recuperare',
           teacher: makeup.teacher?.name || makeup.teacher?.email || '-',
           teacherId: makeup.teacherId,
           studentsCount: makeup.students?.length || 0,
@@ -189,7 +204,7 @@ export default function TeacherOrarPage() {
         })
       }
     })
-    
+
     // Sortăm fiecare zi după oră
     Object.keys(scheduleByDay).forEach(day => {
       scheduleByDay[day].sort((a, b) => {
@@ -198,7 +213,7 @@ export default function TeacherOrarPage() {
         return a.time.localeCompare(b.time)
       })
     })
-    
+
     return { scheduleByDay, todayName, tomorrowName, sortedDays }
   }, [filteredGroups, makeupLessons, selectedDay, selectedTeacher, selectedBranch, showOnlyMine, currentUserId])
 
@@ -221,18 +236,53 @@ export default function TeacherOrarPage() {
 
   const totalLessons = schedule.sortedDays.reduce((sum, day) => sum + schedule.scheduleByDay[day].length, 0)
 
+  // Grila are atâtea rânduri câte lecții are ziua cea mai încărcată
+  const gridRowCount = schedule.sortedDays.reduce(
+    (max, day) => Math.max(max, schedule.scheduleByDay[day].length), 0
+  )
+
   return (
     <div className="space-y-4 xs:space-y-6">
-      <div>
-        <h1 className="text-xl xs:text-2xl font-bold text-gray-900">Orar Complet</h1>
-        <p className="text-sm xs:text-base text-gray-600">Vizualizează orarul tuturor grupelor</p>
+      <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-3 xs:gap-0">
+        <div>
+          <h1 className="text-xl xs:text-2xl font-bold text-gray-900">
+            {canViewAll ? 'Orar Complet' : 'Orarul meu'}
+          </h1>
+          <p className="text-sm xs:text-base text-gray-600">
+            {canViewAll
+              ? 'Vizualizează orarul tuturor grupelor'
+              : 'Grupele și recuperările tale'}
+          </p>
+        </div>
+
+        {/* Aceleași date, două forme: listă pe zile sau tabel săptămânal */}
+        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden self-start">
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+              viewMode === 'list' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            Listă
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('grid')}
+            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+              viewMode === 'grid' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            Tabel săptămânal
+          </button>
+        </div>
       </div>
 
       {/* Filtre */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 xs:p-4">
         <div className="flex flex-wrap gap-3 items-end">
           {/* Toggle "Doar grupele mele" */}
-          <div className="flex items-center">
+          <div className={canViewAll ? 'flex items-center' : 'hidden'}>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
@@ -266,7 +316,7 @@ export default function TeacherOrarPage() {
           </div>
 
           {/* Filtru profesor - ascuns dacă "doar ale mele" e activ */}
-          {!showOnlyMine && (
+          {!showOnlyMine && canViewAll && (
             <div className="flex-1 min-w-[150px]">
               <label className="block text-xs font-medium text-gray-500 mb-1">Profesor</label>
               <select
@@ -317,15 +367,87 @@ export default function TeacherOrarPage() {
         )}
       </div>
 
+      {/* Tabel săptămânal: TIME | ZI, pentru fiecare zi — ca orarul pe hârtie */}
+      {viewMode === 'grid' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+          <table className="min-w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                {schedule.sortedDays.map((day) => (
+                  <th key={day} colSpan={2} className={`px-2 py-2 border border-gray-200 text-center text-xs font-bold uppercase tracking-wide ${
+                    day === schedule.todayName ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {day}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                {schedule.sortedDays.map((day) => (
+                  <Fragment key={`h-${day}`}>
+                    <th className="px-2 py-1 border border-gray-200 bg-gray-50 text-[10px] font-medium text-gray-500 uppercase">Ora</th>
+                    <th className="px-2 py-1 border border-gray-200 bg-gray-50 text-[10px] font-medium text-gray-500 uppercase">Grupa</th>
+                  </Fragment>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: gridRowCount }, (_, row) => (
+                <tr key={row}>
+                  {schedule.sortedDays.map((day) => {
+                    const item = schedule.scheduleByDay[day][row]
+                    if (!item) {
+                      return (
+                        <Fragment key={`${day}-${row}`}>
+                          <td className="border border-gray-200 px-2 py-1.5" />
+                          <td className="border border-gray-200 px-2 py-1.5" />
+                        </Fragment>
+                      )
+                    }
+                    return (
+                      <Fragment key={`${day}-${row}`}>
+                        <td className="border border-gray-200 px-2 py-1.5 text-xs font-semibold text-gray-800 whitespace-nowrap text-center">
+                          {item.time}
+                        </td>
+                        <td
+                          className="border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-900 whitespace-nowrap"
+                          style={{ backgroundColor: groupColor(item.name) }}
+                          title={`${item.name} · ${item.teacher} · ${item.room}`}
+                        >
+                          {item.isMyGroup && <span className="mr-1 text-indigo-700">●</span>}
+                          {item.name}
+                          {item.isMakeup && <span className="ml-1 text-[10px] text-amber-700">(rec.)</span>}
+                          <span className="block text-[10px] font-normal text-gray-600">
+                            {item.teacher}
+                            {item.studentsCount ? ` · ${item.studentsCount} elevi` : ''}
+                          </span>
+                        </td>
+                      </Fragment>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {gridRowCount === 0 && (
+            <p className="p-6 text-center text-sm text-gray-500">Nicio lecție programată.</p>
+          )}
+
+          <p className="px-3 py-2 border-t border-gray-100 text-[11px] text-gray-500">
+            <span className="text-indigo-700">●</span> grupele tale
+          </p>
+        </div>
+      )}
+
       {/* Orar pe zile */}
-      <div className="space-y-6">
+      <div className={viewMode === 'grid' ? 'hidden' : 'space-y-6'}>
         {schedule.sortedDays.map((day) => {
           const daySchedule = schedule.scheduleByDay[day]
           const isToday = day === schedule.todayName
           const isTomorrow = day === schedule.tomorrowName
-          
+
           if (daySchedule.length === 0) return null
-          
+
           return (
             <div key={day} className="space-y-3">
               {/* Header zi */}
@@ -353,13 +475,13 @@ export default function TeacherOrarPage() {
               {/* Card-uri */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {daySchedule.map((item, idx) => (
-                  <div 
-                    key={`${item.id}-${idx}`} 
+                  <div
+                    key={`${item.id}-${idx}`}
                     className={`bg-white rounded-xl border p-4 shadow-sm hover:shadow-md transition-shadow ${
                       item.isMakeup
                         ? 'border-amber-300 ring-1 ring-amber-200 bg-amber-50/30'
-                        : item.isMyGroup 
-                          ? 'border-indigo-300 ring-1 ring-indigo-200' 
+                        : item.isMyGroup
+                          ? 'border-indigo-300 ring-1 ring-indigo-200'
                           : isToday ? 'border-indigo-200' : 'border-gray-100'
                     }`}
                   >
@@ -380,8 +502,8 @@ export default function TeacherOrarPage() {
                       <div className="flex items-center gap-1 flex-wrap justify-end">
                         {item.isMakeup && (
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${
-                            item.makeupStatus === 'IN_PROGRESS' 
-                              ? 'bg-green-100 text-green-800 animate-pulse' 
+                            item.makeupStatus === 'IN_PROGRESS'
+                              ? 'bg-green-100 text-green-800 animate-pulse'
                               : 'bg-amber-100 text-amber-800'
                           }`}>
                             {item.makeupStatus === 'IN_PROGRESS' ? (
@@ -419,8 +541,8 @@ export default function TeacherOrarPage() {
                     <h3 className={`font-semibold mb-1 ${item.isMakeup ? 'text-amber-800' : 'text-gray-900'}`}>
                       {item.name}
                     </h3>
-                    <p className="text-xs text-gray-500 mb-2">{item.course}</p>
-                    
+                    <p className="text-xs text-gray-500 mb-2">{item.level}</p>
+
                     {/* Profesor */}
                     {!showOnlyMine && !selectedTeacher && (
                       <p className="text-xs text-gray-600 mb-2 flex items-center gap-1">
@@ -453,8 +575,8 @@ export default function TeacherOrarPage() {
                       <Link
                         href={item.isMakeup ? `/teacher/makeup/${item.id}` : `/teacher/groups/${item.id}`}
                         className={`mt-3 block text-center text-xs font-medium ${
-                          item.isMakeup 
-                            ? 'text-amber-600 hover:text-amber-800' 
+                          item.isMakeup
+                            ? 'text-amber-600 hover:text-amber-800'
                             : 'text-indigo-600 hover:text-indigo-800'
                         }`}
                       >
@@ -467,11 +589,11 @@ export default function TeacherOrarPage() {
             </div>
           )
         })}
-        
+
         {/* Mesaj dacă nu sunt grupe */}
         {schedule.sortedDays.every(day => schedule.scheduleByDay[day].length === 0) && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 xs:p-12 text-center text-gray-500">
-            {hasActiveFilters 
+            {hasActiveFilters
               ? 'Nu există grupe care să corespundă filtrelor selectate.'
               : 'Nu există grupe programate.'
             }

@@ -27,7 +27,6 @@ export default async function TeacherDetailPage({ params }) {
     include: {
       teacherGroups: {
         include: {
-          course: true,
           groupStudents: {
             include: {
               student: true
@@ -119,7 +118,7 @@ export default async function TeacherDetailPage({ params }) {
     return {
       id: group.id,
       name: group.name,
-      courseName: group.course?.title,
+      levelName: group.level,
       active: group.active,
       totalStudents: group.groupStudents.length,
       activeStudents: activeStudents.length,
@@ -235,7 +234,7 @@ export default async function TeacherDetailPage({ params }) {
               <CheckCircleIcon className="w-4 h-4 xs:w-5 xs:h-5 text-blue-600" />
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] xs:text-xs text-gray-500 truncate">Terminat Curs</p>
+              <p className="text-[10px] xs:text-xs text-gray-500 truncate">Terminat cursul</p>
               <p className="text-base xs:text-xl font-bold text-gray-900">{stats.completedStudents}</p>
             </div>
           </div>
@@ -360,7 +359,7 @@ export default async function TeacherDetailPage({ params }) {
                   <td className="px-6 py-4">
                     <div>
                       <p className="font-medium text-gray-900">{group.name}</p>
-                      <p className="text-sm text-gray-500">{group.courseName}</p>
+                      <p className="text-sm text-gray-500">{group.levelName}</p>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-center">
@@ -446,7 +445,7 @@ export default async function TeacherDetailPage({ params }) {
                 {/* Group Header */}
                 <div>
                   <h3 className="font-semibold text-gray-900 text-sm xs:text-base">{group.name}</h3>
-                  <p className="text-xs xs:text-sm text-gray-500">{group.courseName}</p>
+                  <p className="text-xs xs:text-sm text-gray-500">{group.levelName}</p>
                 </div>
 
                 {/* Stats Grid */}

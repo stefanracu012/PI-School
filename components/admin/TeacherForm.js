@@ -23,12 +23,22 @@ export default function TeacherForm({ teacher }) {
     role: teacher?.role || 'TEACHER',
     active: teacher?.active ?? true,
     twoFactorAllowed: teacher?.twoFactorAllowed ?? false,
+    superTeacher: teacher?.superTeacher ?? false,
+    canViewAllSchedules: teacher?.canViewAllSchedules ?? false,
     permissions: teacher?.permissions || []
   })
 
   const isSuperAdmin = session?.user?.role === 'SUPERADMIN'
   const canChangeRole = isSuperAdmin
-  const showPermissions = isSuperAdmin && formData.role === 'ADMIN'
+
+  // Adminul vede toate categoriile; profesorul, doar acțiunile lui.
+  // Restul permisiunilor n-ar avea ce face într-un cont de profesor.
+  const TEACHER_CATEGORY = 'Corectări'
+  const isTeacherRole = formData.role === 'TEACHER'
+  const showPermissions = isSuperAdmin && (formData.role === 'ADMIN' || isTeacherRole)
+  const visibleCategories = isTeacherRole
+    ? [TEACHER_CATEGORY]
+    : PERMISSION_CATEGORIES
 
   const permissionsByCategory = useMemo(() => getPermissionsByCategory(), [])
 
@@ -46,7 +56,10 @@ export default function TeacherForm({ teacher }) {
       ...prev,
       role: newRole,
       // Reset permissions when changing to TEACHER
-      permissions: newRole === 'TEACHER' ? [] : prev.permissions
+      // La trecerea spre profesor rămân doar drepturile care au sens acolo
+      permissions: newRole === 'TEACHER'
+        ? prev.permissions.filter((k) => k.startsWith('teacher.'))
+        : prev.permissions
     }))
   }
 
@@ -85,11 +98,20 @@ export default function TeacherForm({ teacher }) {
   }
 
   const selectAll = () => {
-    const allPerms = Object.keys(PERMISSIONS)
-    setFormData(prev => ({
-      ...prev,
-      permissions: prev.permissions.length === allPerms.length ? [] : allPerms
-    }))
+    // La profesor, „tot" înseamnă doar drepturile lui, nu toată aplicația
+    const allPerms = isTeacherRole
+      ? Object.keys(PERMISSIONS).filter((k) => k.startsWith('teacher.'))
+      : Object.keys(PERMISSIONS)
+
+    setFormData(prev => {
+      const hasAll = allPerms.every((k) => prev.permissions.includes(k))
+      return {
+        ...prev,
+        permissions: hasAll
+          ? prev.permissions.filter((k) => !allPerms.includes(k))
+          : [...new Set([...prev.permissions, ...allPerms])],
+      }
+    })
   }
 
   const handleSubmit = async (e) => {
@@ -187,6 +209,7 @@ export default function TeacherForm({ teacher }) {
             <input
               type="email"
               name="email"
+              autoComplete="off"
               value={formData.email}
               onChange={handleChange}
               required
@@ -229,6 +252,7 @@ export default function TeacherForm({ teacher }) {
             <input
               type="password"
               name="password"
+              autoComplete="new-password"
               value={formData.password}
               onChange={handleChange}
               required={!teacher}
@@ -266,6 +290,47 @@ export default function TeacherForm({ teacher }) {
               </div>
             </label>
           </div>
+
+          {formData.role === 'TEACHER' && (
+            <div className="flex items-center md:col-span-2">
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  name="canViewAllSchedules"
+                  checked={formData.canViewAllSchedules}
+                  onChange={handleChange}
+                  className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">📅 Vede orarul întregii școli</span>
+                  <p className="text-xs text-gray-500">
+                    Fără bifă, în <strong>Orar</strong> își vede doar propriile grupe și recuperări.
+                    Cu bifă, vede și grupele celorlalți profesori.
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
+
+          {formData.role === 'TEACHER' && (
+            <div className="flex items-center md:col-span-2">
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  name="superTeacher"
+                  checked={formData.superTeacher}
+                  onChange={handleChange}
+                  className="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700">⭐ Super Profesor</span>
+                  <p className="text-xs text-gray-500">
+                    Poate porni lecții la <strong>orice dată și oră</strong> (în trecut sau viitor), fără restricții de program. Util pentru înregistrare retroactivă.
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
         </div>
 
         {/* Permissions Section - Only for ADMIN and only SUPERADMIN can edit */}
@@ -279,7 +344,9 @@ export default function TeacherForm({ teacher }) {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Permisiuni</h3>
                   <p className="text-sm text-gray-500">
-                    Selectează ce poate face acest administrator în sistem
+                    {isTeacherRole
+                      ? 'Ce poate corecta singur, fără să ceară administrației'
+                      : 'Selectează ce poate face acest administrator în sistem'}
                   </p>
                 </div>
               </div>
@@ -288,19 +355,33 @@ export default function TeacherForm({ teacher }) {
                 onClick={selectAll}
                 className="px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
               >
-                {formData.permissions.length === Object.keys(PERMISSIONS).length ? 'Deselectează tot' : 'Selectează tot'}
+                {isTeacherRole
+                  ? 'Selectează toate'
+                  : formData.permissions.length === Object.keys(PERMISSIONS).length
+                    ? 'Deselectează tot'
+                    : 'Selectează tot'}
               </button>
             </div>
 
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
               <p className="text-sm text-amber-800">
-                <strong>Atenție:</strong> Dacă nu selectezi nicio permisiune, acest utilizator va avea acces la panoul admin 
-                dar nu va putea vedea sau face nimic.
+                {isTeacherRole ? (
+                  <>
+                    <strong>Cum funcționează:</strong> fiecare drept merge <strong>24 de ore</strong> de la
+                    crearea înregistrării — cât timp greșeala e proaspătă. Peste acest interval, doar cu
+                    „Fără limita de 24 de ore". Administrația poate oricând orice.
+                  </>
+                ) : (
+                  <>
+                    <strong>Atenție:</strong> Dacă nu selectezi nicio permisiune, acest utilizator va avea acces
+                    la panoul admin dar nu va putea vedea sau face nimic.
+                  </>
+                )}
               </p>
             </div>
 
             <div className="space-y-2">
-              {PERMISSION_CATEGORIES.map(category => {
+              {visibleCategories.map(category => {
                 const categoryPerms = permissionsByCategory[category] || []
                 if (categoryPerms.length === 0) return null
 
@@ -318,10 +399,10 @@ export default function TeacherForm({ teacher }) {
                       <div className="flex items-center gap-3">
                         <span className="font-medium text-gray-900">{category}</span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          selectedCount === 0 
-                            ? 'bg-gray-200 text-gray-600' 
-                            : allSelected 
-                              ? 'bg-green-100 text-green-700' 
+                          selectedCount === 0
+                            ? 'bg-gray-200 text-gray-600'
+                            : allSelected
+                              ? 'bg-green-100 text-green-700'
                               : 'bg-indigo-100 text-indigo-700'
                         }`}>
                           {selectedCount}/{categoryPerms.length}
@@ -403,7 +484,7 @@ export default function TeacherForm({ teacher }) {
             type="submit"
             disabled={loading}
             className={`px-6 py-2 text-white rounded-lg font-medium disabled:opacity-50 ${
-              formData.role === 'ADMIN' 
+              formData.role === 'ADMIN'
                 ? 'bg-red-600 hover:bg-red-700'
                 : 'bg-indigo-600 hover:bg-indigo-700'
             }`}

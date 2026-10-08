@@ -1,5 +1,8 @@
 'use client'
 
+import TelegramConnect from '@/components/TelegramConnect'
+import MetaLeadsToggle from '@/components/admin/MetaLeadsToggle'
+import DatabaseBackup from '@/components/admin/DatabaseBackup'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
@@ -7,6 +10,7 @@ import toast from 'react-hot-toast'
 import Image from 'next/image'
 import { usePermissions } from '@/hooks/usePermissions'
 import TwoFactorModal from '@/components/admin/TwoFactorModal'
+import SecurityLoading from './loading'
 
 export default function SecurityPage() {
   const { data: session, update: updateSession } = useSession()
@@ -177,11 +181,7 @@ export default function SecurityPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    )
+    return <SecurityLoading />
   }
 
   // Afișează modalul 2FA dacă este necesar
@@ -437,6 +437,22 @@ export default function SecurityPage() {
         </div>
       </div>
 
+      {/* Telegram */}
+      <div className="mt-6">
+        <TelegramConnect />
+      </div>
+
+      {/* Automatizări — doar superadmin le vede și le poate schimba */}
+      {isSuperAdmin && (
+        <div className="mt-6">
+          <MetaLeadsToggle />
+        </div>
+      )}
+      {isSuperAdmin && (
+        <div className="mt-6">
+          <DatabaseBackup />
+        </div>
+      )}
       {/* Account Info */}
       <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Informații cont</h2>

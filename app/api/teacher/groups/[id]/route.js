@@ -27,7 +27,7 @@ function formatScheduleTime(scheduleTime, scheduleDays) {
 async function notifyGroupUpdate(groupName, teacherName, updates, scheduleDays) {
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_LESSONS_BOT_TOKEN
   const CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID
-  const THREAD_ID = process.env.TELEGRAM_ADMIN_THREAD_ID
+  const THREAD_ID = process.env.TELEGRAM_TEACHER_ACTIVITIES_THREAD_ID
   
   if (!TELEGRAM_BOT_TOKEN || !CHAT_ID) return
   
@@ -144,7 +144,6 @@ export async function PATCH(request, { params }) {
       where: { id },
       data: updateData,
       include: {
-        course: true,
         branch: true,
         teacher: true
       }

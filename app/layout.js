@@ -1,17 +1,23 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import AuthProvider from "@/components/providers/AuthProvider";
 import ThemeProvider from "@/components/providers/ThemeProvider";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import { CRM_PATH } from "@/lib/crm-paths";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-poppins",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata = {
@@ -22,7 +28,7 @@ export const metadata = {
   description: "PI School oferă cursuri de calitate pentru copii în Chișinău: limba germană, engleză, franceză, matematică și multe altele. Profesori calificați, curriculum național, grupe mici.",
   keywords: [
     "cursuri copii Chișinău",
-    "after school Chișinău", 
+    "after school Chișinău",
     "cursuri limba germană copii",
     "cursuri limba engleză copii",
     "cursuri matematică copii",
@@ -32,6 +38,7 @@ export const metadata = {
     "PI School",
     "cursuri după școală"
   ],
+  applicationName: "PI School",
   authors: [{ name: "PI School" }],
   creator: "PI School",
   publisher: "PI School",
@@ -89,18 +96,30 @@ export const metadata = {
       { url: '/apple-icon.png', sizes: '180x180', type: 'image/png' },
     ],
   },
-  verification: {
-    // google: "your-google-verification-code",
-  },
+  manifest: '/manifest.json',
   category: "education",
 };
 
-// Script to apply theme before page renders to prevent flash
+// Viewport — disable user-zoom (stops iOS input auto-zoom on answer fields)
+// and enable viewport-fit:cover so env(safe-area-inset-*) returns real values
+// inside the iPhone PWA (notch / status bar / home indicator).
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+  themeColor: '#0c1a1d',
+  interactiveWidget: 'resizes-content',
+};
+
+// Script to apply theme before page renders to prevent flash — doar în CRM,
+// site-ul public are culorile lui
 const themeScript = `
   (function() {
     try {
       const theme = localStorage.getItem('theme');
-      if (theme === 'light') {
+      if (theme === 'light' && ${CRM_PATH}.test(location.pathname)) {
         document.documentElement.classList.add('light');
       }
     } catch (e) {}
@@ -114,14 +133,35 @@ export default function RootLayout({ children }) {
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${spaceGrotesk.variable} ${inter.variable} antialiased`}
       >
         <AuthProvider>
           <ThemeProvider>
             {children}
           </ThemeProvider>
-          <Toaster position="top-right" />
+          <Toaster
+            position="top-right"
+            containerStyle={{
+              top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+              right: 'calc(env(safe-area-inset-right, 0px) + 12px)',
+            }}
+            toastOptions={{
+              style: {
+                fontSize: '14px',
+                maxWidth: '92vw',
+                background: '#15292e',
+                color: '#ffffff',
+                border: '1px solid #1e3d44',
+                borderRadius: '14px',
+                padding: '12px 16px',
+              },
+              success: { iconTheme: { primary: '#30919f', secondary: '#0c1a1d' } },
+              error: { iconTheme: { primary: '#f8b316', secondary: '#0c1a1d' } },
+            }}
+          />
         </AuthProvider>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

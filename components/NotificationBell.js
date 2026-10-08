@@ -64,7 +64,33 @@ const TYPE_CONFIG = {
     color: 'bg-orange-500',
     iconColor: 'text-orange-600',
     lightColor: 'bg-orange-50 border-orange-200'
+  },
+  LATE_SESSION: {
+    Icon: ExclamationTriangleIcon,
+    color: 'bg-amber-500',
+    iconColor: 'text-amber-600',
+    lightColor: 'bg-amber-50 border-amber-200'
+  },
+  REVISION_REQUEST: {
+    Icon: ClipboardDocumentListIcon,
+    color: 'bg-indigo-500',
+    iconColor: 'text-indigo-600',
+    lightColor: 'bg-indigo-50 border-indigo-200'
+  },
+  LEAD_FOLLOWUP: {
+    Icon: BellAlertIcon,
+    color: 'bg-teal-500',
+    iconColor: 'text-teal-600',
+    lightColor: 'bg-teal-50 border-teal-200'
   }
+}
+
+// Plasă pentru orice tip nou care ajunge în baza de date
+const FALLBACK_CONFIG = {
+  Icon: BellIcon,
+  color: 'bg-gray-500',
+  iconColor: 'text-gray-600',
+  lightColor: 'bg-gray-50 border-gray-200'
 }
 
 export default function NotificationBell({ isAdmin = false }) {
@@ -224,7 +250,7 @@ export default function NotificationBell({ isAdmin = false }) {
               </div>
             ) : (
               notifications.map((notification) => {
-                const config = TYPE_CONFIG[notification.type] || TYPE_CONFIG.LOW_LESSONS
+                const config = TYPE_CONFIG[notification.type] || FALLBACK_CONFIG
                 
                 return (
                   <div

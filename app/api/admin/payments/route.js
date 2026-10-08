@@ -59,9 +59,7 @@ export async function GET(request) {
           include: {
             student: true,
             group: {
-              include: {
-                course: true
-              }
+              include: {}
             }
           }
         }
@@ -72,7 +70,9 @@ export async function GET(request) {
     // Calculate statistics
     const totalAmount = payments.reduce((sum, p) => sum + p.amount, 0)
     const totalPayments = payments.length
-    const uniqueStudents = new Set(payments.map(p => p.groupStudent.studentId)).size
+    const uniqueStudents = new Set(
+      payments.map(p => p.groupStudent?.studentId).filter(Boolean)
+    ).size
 
     return NextResponse.json({
       payments,
@@ -103,7 +103,7 @@ export async function POST(request) {
     }
 
     const data = await request.json()
-    const { groupStudentId, amount, paymentDate, paymentMethod, notes, lessonsAdded } = data
+    const { groupStudentId, amount, paymentDate, paymentMethod, notes, lessonsAdded, forYear, forMonth, debt } = data
 
     // 2FA is not required for adding payments - only for sensitive actions
 
@@ -117,9 +117,12 @@ export async function POST(request) {
         groupStudentId,
         amount: parseFloat(amount),
         paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+        forYear: forYear ? parseInt(forYear, 10) : null,
+        forMonth: forMonth ? parseInt(forMonth, 10) : null,
         paymentMethod,
         notes,
-        lessonsAdded: lessonsAdded ? parseInt(lessonsAdded) : null
+        lessonsAdded: lessonsAdded ? parseInt(lessonsAdded) : null,
+        debt: debt === '' || debt === undefined || debt === null ? null : parseFloat(debt)
       },
       include: {
         groupStudent: {

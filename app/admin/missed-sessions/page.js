@@ -248,7 +248,7 @@ export default function MissedSessionsPage() {
                     <AcademicCapIcon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400 mt-0.5 flex-shrink-0" />
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-900 text-sm sm:text-base truncate">{session.group?.name}</p>
-                      <p className="text-xs text-gray-500 truncate">{session.group?.course?.title}</p>
+                      <p className="text-xs text-gray-500 truncate">{session.group?.level}</p>
                     </div>
                   </div>
                 </Link>
@@ -321,7 +321,7 @@ export default function MissedSessionsPage() {
                           <AcademicCapIcon className="w-5 h-5 text-gray-400" />
                           <div>
                             <p className="font-medium text-gray-900">{session.group?.name}</p>
-                            <p className="text-xs text-gray-500">{session.group?.course?.title}</p>
+                            <p className="text-xs text-gray-500">{session.group?.level}</p>
                           </div>
                         </div>
                       </Link>

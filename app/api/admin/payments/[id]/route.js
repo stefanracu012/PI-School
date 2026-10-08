@@ -27,9 +27,7 @@ export async function GET(request, { params }) {
           include: {
             student: true,
             group: {
-              include: {
-                course: true
-              }
+              include: {}
             }
           }
         }

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import toast from 'react-hot-toast'
 import TwoFactorModal from './TwoFactorModal'
+import LevelSelect from '@/components/LevelSelect'
 
 const days = ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă', 'Duminică']
 
@@ -25,16 +26,19 @@ const parseScheduleTime = (scheduleTime, scheduleDays) => {
   return {}
 }
 
-export default function GroupForm({ group, courses, teachers, branches = [] }) {
+export default function GroupForm({ group, teachers, branches = [] }) {
   const router = useRouter()
   const { data: session } = useSession()
   const [loading, setLoading] = useState(false)
   const [show2FA, setShow2FA] = useState(false)
   const [branchSchedule, setBranchSchedule] = useState([])
   const [loadingSchedule, setLoadingSchedule] = useState(false)
+  // Plata profesorului o vede și o schimbă doar cine se ocupă de salarii
+  const canSetSalary =
+    session?.user?.role === 'SUPERADMIN' || (session?.user?.permissions || []).includes('salaries.manage')
   const [formData, setFormData] = useState({
     name: group?.name || '',
-    courseId: group?.courseId || '',
+    level: group?.level || '',
     teacherId: group?.teacherId || '',
     branchId: group?.branchId || '',
     scheduleDays: group?.scheduleDays || [],
@@ -42,7 +46,19 @@ export default function GroupForm({ group, courses, teachers, branches = [] }) {
     locationType: group?.locationType || 'offline',
     locationDetails: group?.locationDetails || '',
     startDate: group?.startDate ? new Date(group.startDate).toISOString().split('T')[0] : '',
-    active: group?.active ?? true
+    monthlyLessons: group?.monthlyLessons ?? 8,
+    billingType: group?.billingType || 'MONTHLY',
+    notes: group?.notes || '',
+    isTrial: group?.isTrial ?? false,
+    trialDate: group?.trialDate
+      ? new Date(group.trialDate).toISOString().slice(0, 10)
+      : '',
+    trialTime: group?.trialDate
+      ? new Date(group.trialDate).toISOString().slice(11, 16)
+      : '17:00',
+    active: group?.active ?? true,
+    salaryType: group?.salaryType || '',
+    salaryAmount: group?.salaryAmount ?? '',
   })
 
   const handleChange = (e) => {
@@ -157,7 +173,7 @@ export default function GroupForm({ group, courses, teachers, branches = [] }) {
 
       const payload = {
         name: formData.name,
-        courseId: formData.courseId,
+        level: formData.level || null,
         teacherId: formData.teacherId,
         branchId: formData.branchId || null,
         scheduleDays: formData.scheduleDays,
@@ -165,7 +181,18 @@ export default function GroupForm({ group, courses, teachers, branches = [] }) {
         locationType: formData.locationType,
         locationDetails: formData.locationDetails,
         startDate: formData.startDate ? new Date(formData.startDate).toISOString() : null,
-        active: formData.active
+        monthlyLessons: parseInt(formData.monthlyLessons, 10) || 8,
+        billingType: formData.billingType,
+        notes: formData.notes?.trim() || null,
+        isTrial: formData.isTrial,
+        // Proba are o singură dată; nu intră în orarul săptămânal
+        trialDate: formData.isTrial && formData.trialDate
+          ? `${formData.trialDate}T${formData.trialTime || '17:00'}`
+          : null,
+        active: formData.active,
+        ...(canSetSalary
+          ? { salaryType: formData.salaryType || null, salaryAmount: formData.salaryAmount }
+          : {}),
       }
       if (actionToken) {
         payload.actionToken = actionToken
@@ -205,24 +232,179 @@ export default function GroupForm({ group, courses, teachers, branches = [] }) {
               onChange={handleChange}
               required
               className="w-full px-3 xs:px-4 py-2 text-sm xs:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 placeholder-gray-700"
-              placeholder="ex: Programare - Începători A"
+              placeholder="ex: Clasa 9 — Luni/Miercuri"
             />
           </div>
 
-          <div>
-            <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1">Curs *</label>
-            <select
-              name="courseId"
-              value={formData.courseId}
+        <div className="sm:col-span-2">
+          <label className="flex items-start gap-2 p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-indigo-300">
+            <input
+              type="checkbox"
+              name="isTrial"
+              checked={formData.isTrial}
               onChange={handleChange}
-              required
-              className="w-full px-3 xs:px-4 py-2 text-sm xs:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
-            >
-              <option value="">Selectează curs</option>
-              {courses.map(course => (
-                <option key={course.id} value={course.id}>{course.title}</option>
+              className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900">Lecție de probă</span>
+              <span className="block text-xs text-gray-500">
+                Se ține o singură dată, la data și ora alese — fără orar săptămânal și fără
+                pachet lunar de lecții
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {!formData.isTrial && (
+          <div className="md:col-span-2 space-y-2">
+            <p className="text-xs xs:text-sm font-medium text-gray-700">Cum se plătește</p>
+            <div className="grid xs:grid-cols-2 gap-2 xs:gap-3">
+              {[
+                {
+                  value: 'MONTHLY',
+                  title: 'Lunar',
+                  desc: 'Grupa are un număr fix de lecții pe lună. Se achită lunar, indiferent de prezență.',
+                },
+                {
+                  value: 'INDIVIDUAL',
+                  title: 'Per lecție',
+                  desc: 'Fiecare elev își cumpără lecțiile. La fiecare prezență i se scade una — poate fi și o grupă întreagă, nu doar un elev singur.',
+                },
+              ].map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex items-start gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
+                    formData.billingType === opt.value
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-indigo-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="billingType"
+                    value={opt.value}
+                    checked={formData.billingType === opt.value}
+                    onChange={handleChange}
+                    className="mt-0.5 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-900">{opt.title}</span>
+                    <span className="block text-xs text-gray-500">{opt.desc}</span>
+                  </span>
+                </label>
               ))}
-            </select>
+            </div>
+
+            {formData.billingType === 'MONTHLY' && (
+              <div className="xs:max-w-xs">
+                <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1">Lecții pe lună</label>
+                <input
+                  type="number"
+                  name="monthlyLessons"
+                  min={1}
+                  max={60}
+                  value={formData.monthlyLessons}
+                  onChange={handleChange}
+                  className="w-full px-3 xs:px-4 py-2 text-sm xs:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
+                />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  O lună anume poate fi schimbată din pagina grupei.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {formData.isTrial && (
+          <div className="md:col-span-2 grid xs:grid-cols-2 gap-3 p-3 border border-indigo-200 bg-indigo-50/40 rounded-lg">
+            <div>
+              <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1">Data probei</label>
+              <input
+                type="date"
+                name="trialDate"
+                value={formData.trialDate}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1">Ora probei</label>
+              <input
+                type="time"
+                name="trialTime"
+                step={300}
+                value={formData.trialTime}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
+              />
+            </div>
+          </div>
+        )}
+
+        {canSetSalary && (
+          <div className="md:col-span-2 space-y-2">
+            <p className="text-xs xs:text-sm font-medium text-gray-700">Plata profesorului pe lecție</p>
+            <div className="grid xs:grid-cols-3 gap-2 xs:gap-3">
+              {[
+                { value: '', title: 'Nesetat', desc: 'Lecțiile nu se adaugă singure la salariu.' },
+                { value: 'FIXED', title: 'Sumă fixă', desc: 'Aceeași sumă pentru fiecare lecție ținută.' },
+                { value: 'PER_PRESENCE', title: 'Per prezență', desc: 'Suma × numărul elevilor prezenți la lecție.' },
+              ].map((opt) => (
+                <label
+                  key={opt.value || 'none'}
+                  className={`flex items-start gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
+                    formData.salaryType === opt.value
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-indigo-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="salaryType"
+                    value={opt.value}
+                    checked={formData.salaryType === opt.value}
+                    onChange={handleChange}
+                    className="mt-0.5 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-900">{opt.title}</span>
+                    <span className="block text-xs text-gray-500">{opt.desc}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {formData.salaryType && (
+              <div className="xs:max-w-xs">
+                <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1">
+                  {formData.salaryType === 'FIXED' ? 'Lei pe lecție' : 'Lei pe elev prezent'}
+                </label>
+                <input
+                  type="number"
+                  name="salaryAmount"
+                  min={0}
+                  step="any"
+                  required
+                  value={formData.salaryAmount}
+                  onChange={handleChange}
+                  className="w-full px-3 xs:px-4 py-2 text-sm xs:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
+                />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Se adaugă la salariu când lecția e salvată. Schimbarea nu atinge lecțiile deja ținute.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+          <div>
+            <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1">Nivel</label>
+            <LevelSelect
+              name="level"
+              value={formData.level}
+              onChange={handleChange}
+              className="w-full px-3 xs:px-4 py-2 text-sm xs:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
+            />
           </div>
 
           <div>
@@ -391,6 +573,7 @@ export default function GroupForm({ group, courses, teachers, branches = [] }) {
             onChange={handleChange}
             className="w-full px-3 xs:px-4 py-2 text-sm xs:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900"
           />
+
         </div>
 
         <div className="flex items-center">
@@ -405,6 +588,18 @@ export default function GroupForm({ group, courses, teachers, branches = [] }) {
             <span className="text-xs xs:text-sm font-medium text-gray-700">Grupă activă</span>
           </label>
         </div>
+      </div>
+
+      <div>
+        <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1">Detalii despre grupă</label>
+        <textarea
+          name="notes"
+          value={formData.notes}
+          onChange={handleChange}
+          rows={3}
+          placeholder="Manual folosit, condiții speciale, observații — apar și în raportul grupei"
+          className="w-full px-3 xs:px-4 py-2 text-sm xs:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 resize-none"
+        />
       </div>
 
       <div className="flex flex-col xs:flex-row gap-2 xs:gap-4 pt-3 xs:pt-4 border-t">

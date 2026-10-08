@@ -9,6 +9,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import crypto from 'crypto'
 import prisma from '@/lib/prisma'
 import { verifyPassword } from '@/lib/security/argon2'
 import { 
@@ -264,9 +265,24 @@ export async function POST(request) {
       userAgent,
     })
     
+    // Token de unică folosință pentru signIn-ul NextAuth: dovada că parola
+    // (și 2FA-ul) au trecut aici. Fără el, NextAuth nu deschide sesiunea.
+    const loginToken = crypto.randomBytes(32).toString('hex')
+    await prisma.stepUpToken.create({
+      data: {
+        tokenHash: crypto.createHash('sha256').update(loginToken).digest('hex'),
+        userId: user.id,
+        action: 'login',
+        ipAddress,
+        deviceId,
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
+      },
+    })
+
     // Return success
     return NextResponse.json({
       success: true,
+      loginToken,
       user: {
         id: user.id,
         email: user.email,

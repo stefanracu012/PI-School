@@ -43,9 +43,9 @@ export async function PUT(request, { params }) {
       }, { status: 403 })
     }
 
-    const { name, phone, telegramChatId, password, active, twoFactorAllowed, role, permissions } = body
+    const { name, phone, telegramChatId, password, active, twoFactorAllowed, superTeacher, canViewAllSchedules, role, permissions } = body
 
-    const updateData = { name, phone: phone || null, telegramChatId: telegramChatId || null, active, twoFactorAllowed }
+    const updateData = { name, phone: phone || null, telegramChatId: telegramChatId || null, active, twoFactorAllowed, superTeacher: !!superTeacher, canViewAllSchedules: !!canViewAllSchedules }
     
     if (password) {
       updateData.password = await hashPassword(password)
@@ -62,8 +62,11 @@ export async function PUT(request, { params }) {
         updateData.role = role
       }
       if (Array.isArray(permissions)) {
-        // Only store permissions for ADMIN
-        updateData.permissions = (role === 'TEACHER') ? [] : permissions
+        // La profesor păstrăm doar drepturile lui; restul n-au unde fi folosite
+        const finalRole = role || targetUser?.role
+        updateData.permissions = finalRole === 'TEACHER'
+          ? permissions.filter((k) => k.startsWith('teacher.'))
+          : permissions
       }
     }
 

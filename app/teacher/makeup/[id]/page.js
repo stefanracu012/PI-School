@@ -293,7 +293,7 @@ export default function MakeupSessionPage({ params }) {
               <div>
                 <h1 className="text-base xs:text-lg sm:text-xl md:text-2xl font-bold leading-tight">Sesiune de Recuperare</h1>
                 <p className="text-white/80 text-[10px] xs:text-xs md:text-sm">
-                  {makeup.group?.name} • {makeup.group?.course?.title}
+                  {makeup.group?.name}{makeup.group?.level ? ` • ${makeup.group.level}` : ''}
                 </p>
               </div>
             </div>

@@ -1,19 +1,24 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { notifyNewEnrollment } from '@/lib/telegram'
 import { checkRateLimit, getClientIP } from '@/lib/rate-limit'
+import { levelFromClasa } from '@/lib/levels'
+import { createSiteLead } from '@/lib/site-leads'
 
+/**
+ * Formularul public /inscriere. Fiecare trimitere devine un lead în CRM
+ * (sursa SITE), cu copilul, clasa lui și cursurile alese.
+ */
 export async function POST(request) {
   try {
     // Rate limiting: 1 request per minute
     const clientIP = getClientIP(request)
     const rateLimitKey = `inscrieri:${clientIP}`
-    const { success, remaining, resetIn } = checkRateLimit(rateLimitKey, 1, 60000)
+    const { success, resetIn } = checkRateLimit(rateLimitKey, 1, 60000)
 
     if (!success) {
       return NextResponse.json(
         { error: `Prea multe cereri. Încercați din nou în ${Math.ceil(resetIn / 1000)} secunde.` },
-        { 
+        {
           status: 429,
           headers: {
             'X-RateLimit-Remaining': '0',
@@ -44,48 +49,36 @@ export async function POST(request) {
     }
 
     // Obține numele cursurilor din baza de date
-    let cursuriNume = []
+    const cursuriNume = []
     for (const cursId of cursuriArray) {
       if (cursId === 'selectam-impreuna') {
         cursuriNume.push('Selectăm împreună')
-      } else {
+      } else if (/^[a-f0-9]{24}$/i.test(String(cursId))) {
         const curs = await prisma.course.findUnique({
           where: { id: cursId },
           select: { title: true }
         })
-        if (curs) {
-          cursuriNume.push(curs.title)
-        } else {
-          cursuriNume.push(cursId)
-        }
+        cursuriNume.push(curs?.title || cursId)
+      } else {
+        cursuriNume.push(String(cursId))
       }
     }
 
-    // Salvare în baza de date
-    const inscriere = await prisma.inscriere.create({
-      data: {
-        numeParinte,
-        numeCopil,
-        email,
-        telefon,
-        clasa,
-        cursuri: cursuriNume,
-        mesaj: mesaj || '',
-        status: 'NOU'
-      }
+    const message = [
+      `Formular de înscriere de pe site — Cursuri: ${cursuriNume.join(', ') || '—'}`,
+      mesaj?.trim(),
+    ].filter(Boolean).join('\n')
+
+    const lead = await createSiteLead({
+      name: String(numeParinte).trim().slice(0, 120),
+      email: String(email).trim().slice(0, 160),
+      phone: String(telefon).trim().slice(0, 40),
+      message: message.slice(0, 2000),
+      sourceDetail: 'pischool.md/inscriere',
+      child: { name: String(numeCopil).trim().slice(0, 120), level: levelFromClasa(clasa) },
     })
 
-    // Trimite notificare pe Telegram
-    await notifyNewEnrollment(
-      numeCopil,
-      numeParinte,
-      telefon,
-      email,
-      cursuriNume.join(', '),
-      mesaj
-    )
-
-    return NextResponse.json({ success: true, id: inscriere.id })
+    return NextResponse.json({ success: true, id: lead.id })
   } catch (error) {
     console.error('Eroare la înscriere:', error)
     return NextResponse.json(
@@ -95,18 +88,5 @@ export async function POST(request) {
   }
 }
 
-export async function GET(request) {
-  try {
-    const inscrieri = await prisma.inscriere.findMany({
-      orderBy: { createdAt: 'desc' }
-    })
-
-    return NextResponse.json(inscrieri)
-  } catch (error) {
-    console.error('Eroare la obținerea înscrierilor:', error)
-    return NextResponse.json(
-      { error: 'A apărut o eroare' },
-      { status: 500 }
-    )
-  }
-}
+// Fără GET public: lista de lead-uri conține date personale și se citește
+// exclusiv autentificat, prin /api/admin/leads.

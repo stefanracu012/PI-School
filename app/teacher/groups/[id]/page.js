@@ -1,10 +1,17 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import dynamic from 'next/dynamic'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import StartSessionButton from '@/components/teacher/StartSessionButton'
-import EditGroupDetailsButton from '@/components/teacher/EditGroupDetailsButton'
+const StartSessionButton = dynamic(() => import('@/components/teacher/StartSessionButton'))
+const EditGroupDetailsButton = dynamic(() => import('@/components/teacher/EditGroupDetailsButton'))
+import CopyStudentsButton from '@/components/CopyStudentsButton'
+import LessonPackagePanel from '@/components/groups/LessonPackagePanel'
+import AddPaymentButton from '@/components/admin/AddPaymentButton'
+import PaymentCorrectionControls from '@/components/teacher/PaymentCorrectionControls'
+import { paidForMonth } from '@/lib/payments'
+import TrialLessonsPanel from '@/components/groups/TrialLessonsPanel'
 import { 
   AcademicCapIcon, 
   CalendarDaysIcon, 
@@ -12,6 +19,13 @@ import {
   PlusIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
+
+// Cât a achitat elevul pentru luna curentă (null dacă nimic)
+const paidThisMonth = (payments = []) => {
+  const now = new Date()
+  const total = paidForMonth(payments, now.getFullYear(), now.getMonth() + 1)
+  return total > 0 ? total : null
+}
 
 // Helper pentru formatarea programului
 const formatSchedule = (scheduleDays, scheduleTime) => {
@@ -50,10 +64,6 @@ export default async function TeacherGroupDetailPage({ params }) {
   const session = await getServerSession(authOptions)
   const { id } = await params
 
-  if (!session?.user?.id) {
-    redirect('/login')
-  }
-
   // Check if a session already exists for today
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -63,7 +73,6 @@ export default async function TeacherGroupDetailPage({ params }) {
   const group = await prisma.group.findUnique({
     where: { id },
     include: {
-      course: true,
       teacher: true,
       branch: true,
       groupStudents: {
@@ -71,7 +80,10 @@ export default async function TeacherGroupDetailPage({ params }) {
           status: { notIn: ['LEFT', 'TRANSFERRED'] }  // Exclude elevii plecați și transferați
         },
         include: {
-          student: true
+          student: true,
+          payments: {
+            orderBy: { paymentDate: 'desc' },
+          },
         }
       },
       lessonSessions: {
@@ -103,40 +115,9 @@ export default async function TeacherGroupDetailPage({ params }) {
   // Elevii LEFT sunt deja excluși din query
   const activeStudents = group.groupStudents.filter(gs => gs.status === 'ACTIVE' || !gs.status)
   const pausedStudents = group.groupStudents.filter(gs => gs.status === 'PAUSED')
-  const studentsWithZeroLessons = activeStudents.filter(gs => gs.lessonsRemaining === 0)
-  const studentsWithLowLessons = activeStudents.filter(gs => gs.lessonsRemaining > 0 && gs.lessonsRemaining <= 2)
 
   return (
     <div className="space-y-4 xs:space-y-5 md:space-y-6">
-      {/* Warning Messages */}
-      {studentsWithZeroLessons.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg xs:rounded-xl p-3 xs:p-4 flex items-start gap-2 xs:gap-3">
-          <ExclamationTriangleIcon className="w-5 h-5 xs:w-6 xs:h-6 text-red-600 flex-shrink-0" />
-          <div className="min-w-0">
-            <p className="font-semibold text-red-800 text-xs xs:text-sm md:text-base">
-              Atenție: {studentsWithZeroLessons.length} {studentsWithZeroLessons.length === 1 ? 'elev' : 'elevi'} cu 0 lecții!
-            </p>
-            <p className="text-[10px] xs:text-xs md:text-sm text-red-700 mt-0.5 xs:mt-1 break-words">
-              {studentsWithZeroLessons.map(gs => gs.student.fullName).join(', ')}
-            </p>
-          </div>
-        </div>
-      )}
-      
-      {studentsWithLowLessons.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg xs:rounded-xl p-3 xs:p-4 flex items-start gap-2 xs:gap-3">
-          <ExclamationTriangleIcon className="w-5 h-5 xs:w-6 xs:h-6 text-amber-600 flex-shrink-0" />
-          <div className="min-w-0">
-            <p className="font-semibold text-amber-800 text-xs xs:text-sm md:text-base">
-              Atenție: {studentsWithLowLessons.length} {studentsWithLowLessons.length === 1 ? 'elev are' : 'elevi au'} puține lecții
-            </p>
-            <p className="text-[10px] xs:text-xs md:text-sm text-amber-700 mt-0.5 xs:mt-1 break-words">
-              {studentsWithLowLessons.map(gs => `${gs.student.fullName} (${gs.lessonsRemaining})`).join(', ')}
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex flex-col gap-3 xs:gap-4">
         <div>
@@ -156,10 +137,10 @@ export default async function TeacherGroupDetailPage({ params }) {
               {group.active ? 'Activ' : 'Inactiv'}
             </span>
           </div>
-          <p className="text-gray-600 mt-0.5 xs:mt-1 text-xs xs:text-sm md:text-base">{group.course.title}</p>
+          <p className="text-gray-600 mt-0.5 xs:mt-1 text-xs xs:text-sm md:text-base">{group.level || 'Fără nivel'}</p>
         </div>
         <div className="flex flex-wrap gap-2 xs:gap-3">
-          {todaySession ? (
+          {todaySession && (
             <Link
               href={`/teacher/groups/${group.id}/session/${todaySession.id}`}
               className="flex items-center gap-1.5 xs:gap-2 bg-teal-600 hover:bg-teal-700 text-white px-3 xs:px-4 md:px-6 py-2 xs:py-2.5 md:py-3 rounded-lg font-medium transition-colors text-xs xs:text-sm md:text-base"
@@ -168,9 +149,14 @@ export default async function TeacherGroupDetailPage({ params }) {
               <span className="hidden xs:inline">Continuă Sesiunea de Azi</span>
               <span className="xs:hidden">Continuă Sesiunea</span>
             </Link>
-          ) : (
-            <StartSessionButton groupId={group.id} />
           )}
+          <StartSessionButton
+            groupId={group.id}
+            scheduleDays={group.scheduleDays}
+            scheduleTime={group.scheduleTime}
+            isSuperTeacher={!!session.user?.superTeacher}
+            hideRegularStart={!!todaySession}
+          />
           <EditGroupDetailsButton 
             group={{
               id: group.id,
@@ -267,7 +253,24 @@ export default async function TeacherGroupDetailPage({ params }) {
 
       {/* Students List */}
       <div className="bg-white rounded-lg xs:rounded-xl shadow-sm p-3 xs:p-4 md:p-6">
-        <h2 className="text-base xs:text-lg md:text-xl font-bold text-gray-900 mb-3 xs:mb-4">Elevii din grupă</h2>
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-3 xs:mb-4">
+          <h2 className="text-base xs:text-lg md:text-xl font-bold text-gray-900">Elevii din grupă</h2>
+          <CopyStudentsButton
+            groupName={group.name}
+            variant="teacher"
+            students={group.groupStudents.map(gs => {
+              const lastPayment = gs.payments?.[0]
+              return {
+                fullName: gs.student?.fullName,
+                parentName: gs.student?.parentName,
+                parentEmail: gs.student?.parentEmail,
+                parentPhone: gs.student?.parentPhone,
+                lastPaymentAmount: lastPayment?.amount ?? null,
+                lastPaymentDate: lastPayment?.paymentDate ?? null,
+              }
+            })}
+          />
+        </div>
         
         {group.groupStudents.length === 0 ? (
           <p className="text-gray-500 text-center py-6 xs:py-8 text-xs xs:text-sm md:text-base">Nu sunt elevi în această grupă.</p>
@@ -281,26 +284,17 @@ export default async function TeacherGroupDetailPage({ params }) {
                 <div 
                   key={gs.student?.id || gs.id} 
                   className={`p-2.5 xs:p-3 md:p-4 rounded-lg xs:rounded-xl border ${
-                    isInactive ? 'bg-gray-50 border-gray-200 opacity-60' :
-                    gs.lessonsRemaining === 0 ? 'bg-red-50 border-red-200' : 
-                    gs.lessonsRemaining <= 2 ? 'bg-amber-50 border-amber-200' : 
-                    'bg-gray-50 border-gray-100'
+                    isInactive ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-gray-50 border-gray-100'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 xs:gap-3">
                     {/* Student Info */}
                     <div className="flex items-center gap-2 xs:gap-3 min-w-0 flex-1">
                       <div className={`w-8 h-8 xs:w-9 xs:h-9 md:w-10 md:h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        isInactive ? 'bg-gray-200' :
-                        gs.lessonsRemaining === 0 ? 'bg-red-200' : 
-                        gs.lessonsRemaining <= 2 ? 'bg-amber-200' : 
-                        'bg-teal-100'
+                        isInactive ? 'bg-gray-200' : 'bg-teal-100'
                       }`}>
                         <span className={`font-semibold text-xs xs:text-sm ${
-                          isInactive ? 'text-gray-500' :
-                          gs.lessonsRemaining === 0 ? 'text-red-700' : 
-                          gs.lessonsRemaining <= 2 ? 'text-amber-700' : 
-                          'text-teal-700'
+                          isInactive ? 'text-gray-500' : 'text-teal-700'
                         }`}>
                           {gs.student?.fullName?.charAt(0) || 'E'}
                         </span>
@@ -322,33 +316,42 @@ export default async function TeacherGroupDetailPage({ params }) {
                              status === 'LEFT' ? 'Plecat' :
                              status === 'TRANSFERRED' ? 'Transferat' : 'Terminat'}
                           </span>
-                          {!isInactive && gs.lessonsRemaining === 0 && (
-                            <span className="text-[10px] xs:text-xs text-red-600 font-medium">Nu a achitat!</span>
-                          )}
                         </div>
                       </div>
                     </div>
 
-                    {/* Stats */}
-                    <div className="flex items-center gap-1.5 xs:gap-2 flex-shrink-0">
-                      <div className="text-center">
-                        <p className={`text-sm xs:text-base md:text-lg font-bold ${
-                          gs.lessonsRemaining > 3 ? 'text-green-600' :
-                          gs.lessonsRemaining > 0 ? 'text-amber-600' :
-                          'text-red-600'
+                    {/* La grupele individuale contează pachetul elevului, nu luna */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {group.billingType === 'INDIVIDUAL' ? (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] xs:text-xs font-medium whitespace-nowrap ${
+                          (gs.lessonsRemaining ?? 0) <= 0 ? 'bg-red-100 text-red-800'
+                            : (gs.lessonsRemaining ?? 0) <= 2 ? 'bg-amber-100 text-amber-800'
+                            : 'bg-emerald-100 text-emerald-800'
                         }`}>
-                          {gs.lessonsRemaining}
-                        </p>
-                        <p className="text-[9px] xs:text-[10px] text-gray-500">lecții</p>
-                      </div>
-                      <div className="text-center">
-                        <p className={`text-sm xs:text-base md:text-lg font-bold ${
-                          gs.absences === 0 ? 'text-gray-400' : 'text-red-600'
-                        }`}>
-                          {gs.absences}
-                        </p>
-                        <p className="text-[9px] xs:text-[10px] text-gray-500">abs</p>
-                      </div>
+                          {gs.lessonsRemaining ?? 0} lecții rămase
+                        </span>
+                      ) : paidThisMonth(gs.payments) ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] xs:text-xs font-medium whitespace-nowrap">
+                          achitat {paidThisMonth(gs.payments).toLocaleString('ro-RO')} MDL
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] xs:text-xs font-medium whitespace-nowrap">
+                          neachitat
+                        </span>
+                      )}
+
+                      <AddPaymentButton
+                        variant="link"
+                        studentName={gs.student?.fullName}
+                        groups={[{ groupStudentId: gs.id, groupName: group.name, billingType: group.billingType }]}
+                      />
+
+                      {gs.payments?.[0] && (
+                        <PaymentCorrectionControls
+                          payment={gs.payments[0]}
+                          billingType={group.billingType}
+                        />
+                      )}
                     </div>
                   </div>
 
@@ -373,6 +376,13 @@ export default async function TeacherGroupDetailPage({ params }) {
           </div>
         )}
       </div>
+
+      {/* La o probă contează participanții; la grupele obișnuite, pachetul lunar */}
+      {group.isTrial ? (
+        <TrialLessonsPanel groupId={group.id} />
+      ) : (
+        <LessonPackagePanel groupId={group.id} />
+      )}
 
       {/* Recent Sessions */}
       <div className="bg-white rounded-lg xs:rounded-xl shadow-sm p-3 xs:p-4 md:p-6">

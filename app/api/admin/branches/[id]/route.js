@@ -20,10 +20,7 @@ export async function GET(request, { params }) {
       where: { id },
       include: {
         groups: {
-          include: {
-            course: true,
-            teacher: true
-          }
+          include: { teacher: true }
         }
       }
     })

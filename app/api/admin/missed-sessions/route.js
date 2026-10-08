@@ -31,7 +31,6 @@ export async function GET(request) {
       include: {
         group: {
           include: {
-            course: true,
             teacher: {
               select: {
                 id: true,

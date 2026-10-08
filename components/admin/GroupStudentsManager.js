@@ -2,8 +2,17 @@
 
 import { useState, Fragment, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
 import TwoFactorModal from './TwoFactorModal'
+import CopyStudentsButton from '@/components/CopyStudentsButton'
+import { monthOptions, paidForMonth, periodLabel } from '@/lib/payments'
+
+// Luna curentă, în formatul folosit de selectorul de plată
+const currentPeriod = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${now.getMonth() + 1}`
+}
 import { 
   PlusIcon, 
   MinusIcon, 
@@ -29,7 +38,14 @@ const STATUS_CONFIG = {
   TRANSFERRED: { label: 'Transferat', color: 'purple', icon: ArrowsRightLeftIcon }
 }
 
-export default function GroupStudentsManager({ group, allStudents, allGroups = [], permissions = {} }) {
+// Suma achitată de elev în luna curentă (0 = neachitat)
+function paidThisMonth(payments = []) {
+  const now = new Date()
+  const total = paidForMonth(payments, now.getFullYear(), now.getMonth() + 1)
+  return total > 0 ? total : null
+}
+
+export default function GroupStudentsManager({ group, allStudents, allGroups = [], permissions = {} , attendanceStats = {}, totalSessions = 0, monthLabel = '' }) {
   // Destructure permissions with defaults
   const {
     canViewStudents = false,
@@ -46,7 +62,15 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
 
   const router = useRouter()
   const [selectedStudentId, setSelectedStudentId] = useState('')
-  const [lessonsRemaining, setLessonsRemaining] = useState(group.course?.lessonsCount || 12)
+  const [lessonsRemaining, setLessonsRemaining] = useState(0)
+
+  // La grupele lunare nu există „lecții rămase" per elev — pachetul e al grupei.
+  // Acolo arătăm prezențele lunii; pachetul individual rămâne pe elev.
+  const isIndividual = group?.billingType === 'INDIVIDUAL'
+  const lessonsDone = (gs) => attendanceStats[gs.studentId]?.present ?? 0
+  const monthStats = (gs) => attendanceStats[gs.studentId] || { monthPresent: 0, monthAbsent: 0 }
+  const remainingTone = (n) =>
+    n <= 0 ? 'bg-red-100 text-red-700' : n <= 2 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
   const [loading, setLoading] = useState(false)
   const [addingLessons, setAddingLessons] = useState({})
   const [lessonsToAdd, setLessonsToAdd] = useState({})
@@ -65,7 +89,7 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
     paymentDate: new Date().toISOString().split('T')[0],
     paymentMethod: 'cash',
     notes: '',
-    lessonsAdded: ''
+    forPeriod: currentPeriod(), payMode: group?.billingType || 'MONTHLY', lessons: '8', debt: ''
   })
   const [savingPayment, setSavingPayment] = useState(false)
   const [show2FAModal, setShow2FAModal] = useState(false)
@@ -203,7 +227,7 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
       paymentDate: new Date().toISOString().split('T')[0],
       paymentMethod: 'cash',
       notes: '',
-      lessonsAdded: ''
+      forPeriod: currentPeriod(), payMode: group?.billingType || 'MONTHLY', lessons: '8', debt: ''
     })
   }
 
@@ -219,7 +243,14 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
       paymentDate: paymentForm.paymentDate,
       paymentMethod: paymentForm.paymentMethod,
       notes: paymentForm.notes,
-      lessonsAdded: paymentForm.lessonsAdded ? parseInt(paymentForm.lessonsAdded) : null
+      debt: paymentForm.debt === '' ? null : parseFloat(paymentForm.debt),
+      lessonsAdded: null,
+      ...(paymentForm.payMode === 'INDIVIDUAL'
+        ? { lessonsAdded: parseInt(paymentForm.lessons, 10) || 0 }
+        : {
+            forYear: paymentForm.forPeriod ? parseInt(paymentForm.forPeriod.split('-')[0], 10) : null,
+            forMonth: paymentForm.forPeriod ? parseInt(paymentForm.forPeriod.split('-')[1], 10) : null,
+          })
     }
 
     // If user has 2FA enabled, require verification
@@ -254,7 +285,7 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
           paymentDate: new Date().toISOString().split('T')[0],
           paymentMethod: 'cash',
           notes: '',
-          lessonsAdded: ''
+          forPeriod: currentPeriod(), payMode: group?.billingType || 'MONTHLY', lessons: '8', debt: ''
         })
         setShowPaymentModal(null)
         setShow2FAModal(false)
@@ -448,6 +479,27 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
 
       {/* Students List */}
       <div className="bg-white rounded-xl xs:rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        {/* List header with copy button */}
+        <div className="px-3 xs:px-4 sm:px-6 py-2.5 xs:py-3 border-b border-gray-200 flex items-center justify-between gap-2 flex-wrap">
+          <h3 className="text-sm xs:text-base font-semibold text-gray-900">
+            Elevi în grupă <span className="text-gray-400 font-normal">({group.groupStudents.length})</span>
+          </h3>
+          <CopyStudentsButton
+            groupName={group.name}
+            variant="admin"
+            students={group.groupStudents.map(gs => {
+              const lastPayment = gs.payments?.[0]
+              return {
+                fullName: gs.student?.fullName,
+                parentName: gs.student?.parentName,
+                parentEmail: gs.student?.parentEmail,
+                parentPhone: gs.student?.parentPhone,
+                lastPaymentAmount: lastPayment?.amount ?? null,
+                lastPaymentDate: lastPayment?.paymentDate ?? null,
+              }
+            })}
+          />
+        </div>
         {inactiveStudents > 0 && (
           <div className="px-3 xs:px-4 sm:px-6 py-2 xs:py-3 bg-gray-100 border-b border-gray-200">
             <p className="text-xs xs:text-sm text-gray-600">
@@ -464,8 +516,7 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Elev</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lecții rămase</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Absențe</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lecții</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plăți</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Înscris la</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acțiuni</th>
@@ -474,7 +525,7 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
             <tbody className="bg-white divide-y divide-gray-200">
               {group.groupStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                     Nu există elevi în această grupă
                   </td>
               </tr>
@@ -489,11 +540,17 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
                 <Fragment key={gs.id}>
                   <tr className={`hover:bg-gray-50 ${
                     isInactive ? 'bg-gray-50 opacity-60' :
+                    !isIndividual ? '' :
                     gs.lessonsRemaining === 0 ? 'bg-red-50' : 
                     gs.lessonsRemaining <= 2 ? 'bg-amber-50' : ''
                   }`}>
                     <td className="px-6 py-4">
-                      <p className={`font-medium ${isInactive ? 'text-gray-500' : 'text-gray-900'}`}>{gs.student.fullName}</p>
+                      <Link
+                        href={`/admin/students/${gs.studentId}`}
+                        className={`font-medium hover:text-indigo-600 transition-colors ${isInactive ? 'text-gray-500' : 'text-gray-900'}`}
+                      >
+                        {gs.student.fullName}
+                      </Link>
                       <p className="text-sm text-gray-500">{gs.student.parentPhone}</p>
                     </td>
                     <td className="px-6 py-4">
@@ -531,94 +588,29 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          gs.lessonsRemaining > 3 ? 'bg-green-100 text-green-800' : 
-                          gs.lessonsRemaining > 0 ? 'bg-yellow-100 text-yellow-800' : 
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {gs.lessonsRemaining} lecții
-                        </span>
-                        {gs.lessonsRemaining === 0 && (
-                          <span className="text-xs text-red-600 font-medium">Nu a achitat!</span>
-                        )}
-                        {gs.lessonsRemaining > 0 && gs.lessonsRemaining <= 2 && (
-                          <span className="text-xs text-amber-600 font-medium">Aproape expirat</span>
-                        )}
-                      </div>
-                      
-                      {/* Add/Remove lessons controls */}
-                      {canModifyLessons && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <button
-                          onClick={() => setLessonsToAdd(prev => ({ ...prev, [gs.id]: (prev[gs.id] || 0) - 1 }))}
-                          className="p-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                        >
-                          <MinusIcon className="w-4 h-4" />
-                        </button>
-                        <input
-                          type="number"
-                          value={lessonsToAdd[gs.id] || 0}
-                          onChange={(e) => setLessonsToAdd(prev => ({ ...prev, [gs.id]: parseInt(e.target.value) || 0 }))}
-                          className="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm text-gray-900"
-                        />
-                        <button
-                          onClick={() => setLessonsToAdd(prev => ({ ...prev, [gs.id]: (prev[gs.id] || 0) + 1 }))}
-                          className="p-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                        >
-                          <PlusIcon className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleAddLessons(gs.id)}
-                          disabled={!lessonsToAdd[gs.id] || addingLessons[gs.id]}
-                          className="px-3 py-1 bg-indigo-600 text-white text-xs rounded font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {addingLessons[gs.id] ? '...' : 'Salvează'}
-                        </button>
-                      </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {/* Absences display */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          (gs.absences || 0) === 0 ? 'bg-green-100 text-green-800' :
-                          (gs.absences || 0) <= 2 ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {Math.max(0, gs.absences || 0)} {Math.max(0, gs.absences || 0) === 1 ? 'absență' : 'absențe'}
-                        </span>
-                      </div>
-                      
-                      {/* Add/Remove absences controls */}
-                      {canModifyAbsences && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setAbsencesToAdd(prev => ({ ...prev, [gs.id]: (prev[gs.id] || 0) - 1 }))}
-                          className="p-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                        >
-                          <MinusIcon className="w-4 h-4" />
-                        </button>
-                        <input
-                          type="number"
-                          value={absencesToAdd[gs.id] || 0}
-                          onChange={(e) => setAbsencesToAdd(prev => ({ ...prev, [gs.id]: parseInt(e.target.value) || 0 }))}
-                          className="w-16 px-2 py-1 text-center border border-gray-300 rounded text-sm text-gray-900"
-                        />
-                        <button
-                          onClick={() => setAbsencesToAdd(prev => ({ ...prev, [gs.id]: (prev[gs.id] || 0) + 1 }))}
-                          className="p-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                        >
-                          <PlusIcon className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleAddAbsences(gs.id)}
-                          disabled={!absencesToAdd[gs.id] || addingAbsences[gs.id]}
-                          className="px-3 py-1 bg-orange-600 text-white text-xs rounded font-medium hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {addingAbsences[gs.id] ? '...' : 'Salvează'}
-                        </button>
-                      </div>
+                      {isIndividual ? (
+                        <div className="space-y-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${remainingTone(gs.lessonsRemaining ?? 0)}`}>
+                            {gs.lessonsRemaining ?? 0} rămase
+                          </span>
+                          <p className="text-xs text-gray-500">
+                            {lessonsDone(gs)} făcute
+                            {(attendanceStats[gs.studentId]?.absent ?? 0) > 0 && (
+                              <span className="text-red-500"> · {attendanceStats[gs.studentId].absent} absențe</span>
+                            )}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <span className="inline-flex items-center gap-1.5 text-sm">
+                            <span className="font-semibold text-emerald-600">{monthStats(gs).monthPresent}</span>
+                            <span className="text-gray-300">/</span>
+                            <span className="font-semibold text-red-600">{monthStats(gs).monthAbsent}</span>
+                          </span>
+                          <p className="text-xs text-gray-500">
+                            prezent / absent{monthLabel ? ` în ${monthLabel}` : ' luna asta'}
+                          </p>
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4">
@@ -695,7 +687,7 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
                   {/* Expanded Payments Row */}
                   {expandedPayments[gs.id] && gs.payments?.length > 0 && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 bg-gray-50">
+                      <td colSpan={6} className="px-6 py-4 bg-gray-50">
                         <div className="ml-4">
                           <h4 className="text-sm font-semibold text-gray-700 mb-2">Istoricul plăților:</h4>
                           <div className="space-y-2">
@@ -704,6 +696,11 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
                                 <div className="flex items-center gap-4">
                                   <div>
                                     <span className="font-semibold text-green-600">{payment.amount.toLocaleString('ro-RO')} MDL</span>
+                                    {payment.debt > 0 && (
+                                      <span className="ml-2 text-xs font-medium text-red-600">
+                                        datorie {payment.debt.toLocaleString('ro-RO')} MDL
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="text-sm text-gray-500">
                                     {new Date(payment.paymentDate).toLocaleDateString('ro-RO', {
@@ -720,11 +717,7 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
                                     {payment.paymentMethod === 'cash' ? 'Numerar' :
                                      payment.paymentMethod === 'card' ? 'Card' : 'Transfer'}
                                   </span>
-                                  {payment.lessonsAdded && (
-                                    <span className="text-xs text-indigo-600 font-medium">
-                                      +{payment.lessonsAdded} lecții
-                                    </span>
-                                  )}
+                                  <span className="text-indigo-600">{payment.lessonsAdded ? `+${payment.lessonsAdded} lecții` : periodLabel(payment)}</span>
                                   {payment.notes && (
                                     <span className="text-xs text-gray-500 italic">{payment.notes}</span>
                                   )}
@@ -767,15 +760,19 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
               return (
                 <div key={gs.id} className={`p-3 xs:p-4 space-y-3 ${
                   isInactive ? 'bg-gray-50 opacity-70' :
+                  !isIndividual ? '' :
                   gs.lessonsRemaining === 0 ? 'bg-red-50' : 
                   gs.lessonsRemaining <= 2 ? 'bg-amber-50' : ''
                 }`}>
                   {/* Header: Name + Status */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className={`font-medium text-sm xs:text-base truncate ${isInactive ? 'text-gray-500' : 'text-gray-900'}`}>
+                      <Link
+                        href={`/admin/students/${gs.studentId}`}
+                        className={`font-medium text-sm xs:text-base truncate hover:text-indigo-600 transition-colors block ${isInactive ? 'text-gray-500' : 'text-gray-900'}`}
+                      >
                         {gs.student.fullName}
-                      </p>
+                      </Link>
                       <p className="text-xs text-gray-500">{gs.student.parentPhone}</p>
                     </div>
                     {canChangeStatus ? (
@@ -807,98 +804,42 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
                     )}
                   </div>
 
-                  {/* Lessons Section */}
-                  <div className="bg-white/50 rounded-lg p-2 xs:p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Lecții rămase:</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] xs:text-xs font-medium ${
-                          gs.lessonsRemaining > 3 ? 'bg-green-100 text-green-800' : 
-                          gs.lessonsRemaining > 0 ? 'bg-yellow-100 text-yellow-800' : 
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {gs.lessonsRemaining}
+                  <div className="bg-white/50 rounded-lg p-2 xs:p-3 flex items-center justify-between">
+                    <span className="text-xs text-gray-500">
+                      {isIndividual ? 'Lecții:' : `Prezențe${monthLabel ? ` (${monthLabel})` : ''}:`}
+                    </span>
+                    {isIndividual ? (
+                      <span className="flex items-center gap-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] xs:text-xs font-medium ${remainingTone(gs.lessonsRemaining ?? 0)}`}>
+                          {gs.lessonsRemaining ?? 0} rămase
                         </span>
-                        {gs.lessonsRemaining === 0 && (
-                          <span className="text-[10px] text-red-600 font-medium">Nu a achitat!</span>
-                        )}
-                      </div>
-                    </div>
-                    {canModifyLessons && (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => setLessonsToAdd(prev => ({ ...prev, [gs.id]: (prev[gs.id] || 0) - 1 }))}
-                        className="p-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                      >
-                        <MinusIcon className="w-3 h-3 xs:w-4 xs:h-4" />
-                      </button>
-                      <input
-                        type="number"
-                        value={lessonsToAdd[gs.id] || 0}
-                        onChange={(e) => setLessonsToAdd(prev => ({ ...prev, [gs.id]: parseInt(e.target.value) || 0 }))}
-                        className="w-12 xs:w-14 px-1 py-1 text-center border border-gray-300 rounded text-xs xs:text-sm text-gray-900"
-                      />
-                      <button
-                        onClick={() => setLessonsToAdd(prev => ({ ...prev, [gs.id]: (prev[gs.id] || 0) + 1 }))}
-                        className="p-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                      >
-                        <PlusIcon className="w-3 h-3 xs:w-4 xs:h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleAddLessons(gs.id)}
-                        disabled={!lessonsToAdd[gs.id] || addingLessons[gs.id]}
-                        className="flex-1 px-2 py-1 bg-indigo-600 text-white text-[10px] xs:text-xs rounded font-medium hover:bg-indigo-700 disabled:opacity-50"
-                      >
-                        {addingLessons[gs.id] ? '...' : 'Salvează'}
-                      </button>
-                    </div>
-                    )}
-                  </div>
-
-                  {/* Absences Section */}
-                  <div className="bg-white/50 rounded-lg p-2 xs:p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">Absențe:</span>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] xs:text-xs font-medium ${
-                        (gs.absences || 0) === 0 ? 'bg-green-100 text-green-800' :
-                        (gs.absences || 0) <= 2 ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {Math.max(0, gs.absences || 0)}
+                        <span className="text-[10px] xs:text-xs text-gray-500">{lessonsDone(gs)} făcute</span>
                       </span>
-                    </div>
-                    {canModifyAbsences && (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => setAbsencesToAdd(prev => ({ ...prev, [gs.id]: (prev[gs.id] || 0) - 1 }))}
-                        className="p-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                      >
-                        <MinusIcon className="w-3 h-3 xs:w-4 xs:h-4" />
-                      </button>
-                      <input
-                        type="number"
-                        value={absencesToAdd[gs.id] || 0}
-                        onChange={(e) => setAbsencesToAdd(prev => ({ ...prev, [gs.id]: parseInt(e.target.value) || 0 }))}
-                        className="w-12 xs:w-14 px-1 py-1 text-center border border-gray-300 rounded text-xs xs:text-sm text-gray-900"
-                      />
-                      <button
-                        onClick={() => setAbsencesToAdd(prev => ({ ...prev, [gs.id]: (prev[gs.id] || 0) + 1 }))}
-                        className="p-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                      >
-                        <PlusIcon className="w-3 h-3 xs:w-4 xs:h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleAddAbsences(gs.id)}
-                        disabled={!absencesToAdd[gs.id] || addingAbsences[gs.id]}
-                        className="flex-1 px-2 py-1 bg-orange-600 text-white text-[10px] xs:text-xs rounded font-medium hover:bg-orange-700 disabled:opacity-50"
-                      >
-                        {addingAbsences[gs.id] ? '...' : 'Salvează'}
-                      </button>
-                    </div>
+                    ) : (
+                      <span className="text-xs xs:text-sm">
+                        <b className="text-emerald-600">{monthStats(gs).monthPresent}</b>
+                        <span className="text-gray-300"> / </span>
+                        <b className="text-red-600">{monthStats(gs).monthAbsent}</b>
+                      </span>
                     )}
                   </div>
 
-                  {/* Payments Section */}
+                  {/* Plata lunii curente — lecțiile se numără per grupă, nu per elev */}
+                  {canViewPayments && (
+                    <div className="bg-white/50 rounded-lg p-2 xs:p-3 flex items-center justify-between">
+                      <span className="text-xs text-gray-500">Luna curentă:</span>
+                      {paidThisMonth(gs.payments) ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] xs:text-xs font-medium bg-emerald-100 text-emerald-800">
+                          achitat {paidThisMonth(gs.payments).toLocaleString('ro-RO')} MDL
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] xs:text-xs font-medium bg-red-100 text-red-800">
+                          neachitat
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {(canViewPayments || canAddPayments || canDeletePayments) && (
                   <div className="bg-white/50 rounded-lg p-2 xs:p-3 space-y-2">
                     {canViewPayments && (
@@ -937,12 +878,13 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
                           <div key={payment.id} className="flex items-center justify-between bg-white rounded p-2 text-xs">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-semibold text-green-600">{payment.amount} MDL</span>
+                              {payment.debt > 0 && (
+                                <span className="text-red-600">datorie {payment.debt} MDL</span>
+                              )}
                               <span className="text-gray-500">
                                 {new Date(payment.paymentDate).toLocaleDateString('ro-RO')}
                               </span>
-                              {payment.lessonsAdded && (
-                                <span className="text-indigo-600">+{payment.lessonsAdded} lecții</span>
-                              )}
+                              <span className="text-indigo-600">{payment.lessonsAdded ? `+${payment.lessonsAdded} lecții` : periodLabel(payment)}</span>
                             </div>
                             {canDeletePayments && (
                             <button
@@ -1083,40 +1025,75 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Lecții adăugate
-                  </label>
-                  <div className="relative">
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-xl">📚</div>
-                    <input
-                      type="number"
-                      value={paymentForm.lessonsAdded}
-                      onChange={(e) => setPaymentForm(prev => ({ ...prev, lessonsAdded: e.target.value }))}
-                      className="w-full pl-11 pr-4 py-2.5 xs:py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-gray-900 bg-gradient-to-r from-gray-50 to-white hover:border-gray-300 transition-colors font-medium"
-                      placeholder="Ex: 12"
-                    />
-                  </div>
-                  {/* Quick lesson buttons */}
-                  <div className="flex gap-1.5 xs:gap-2 mt-2">
-                    {[4, 8, 12].map(num => (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => setPaymentForm(prev => ({ ...prev, lessonsAdded: num.toString() }))}
-                        className={`px-2 xs:px-3 py-1 text-xs rounded-lg font-medium transition-all ${
-                          paymentForm.lessonsAdded === num.toString()
-                            ? 'bg-indigo-500 text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        {num} lecții
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-1 p-1 bg-gray-100 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setPaymentForm(prev => ({ ...prev, payMode: 'MONTHLY' }))}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    paymentForm.payMode === 'MONTHLY' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                  }`}
+                >
+                  Lunar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentForm(prev => ({ ...prev, payMode: 'INDIVIDUAL' }))}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    paymentForm.payMode === 'INDIVIDUAL' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                  }`}
+                >
+                  Per lecție
+                </button>
+              </div>
+
+              {paymentForm.payMode === 'INDIVIDUAL' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Lecții achitate</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={paymentForm.lessons}
+                    onChange={(e) => setPaymentForm(prev => ({ ...prev, lessons: e.target.value }))}
+                    className="w-full px-4 py-2.5 xs:py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-gray-900 font-medium"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Plată pentru luna
+                  </label>
+                  <select
+                    value={paymentForm.forPeriod}
+                    onChange={(e) => setPaymentForm(prev => ({ ...prev, forPeriod: e.target.value }))}
+                    className="w-full px-4 py-2.5 xs:py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 text-gray-900 font-medium"
+                  >
+                    {monthOptions().map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}{o.isCurrent ? ' (curentă)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Datorie rămasă (MDL)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={paymentForm.debt}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, debt: e.target.value })}
+                  placeholder="0"
+                  className="w-full px-3 xs:px-4 py-2 xs:py-3 border border-gray-300 rounded-lg xs:rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Cât mai are de plată. Lasă gol dacă a achitat tot.
+                </p>
+              </div>
               {/* Payment Method - Visual Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1171,15 +1148,6 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
                 />
               </div>
 
-              {/* Info box */}
-              {paymentForm.lessonsAdded && parseInt(paymentForm.lessonsAdded) > 0 && (
-                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 xs:p-3 flex items-start gap-2">
-                  <span className="text-indigo-500 text-base xs:text-lg">ℹ️</span>
-                  <p className="text-xs xs:text-sm text-indigo-700">
-                    Se vor adăuga automat <strong>{paymentForm.lessonsAdded} lecții</strong> la soldul elevului după salvare.
-                  </p>
-                </div>
-              )}
             </div>
 
             {/* Footer */}
@@ -1410,7 +1378,7 @@ export default function GroupStudentsManager({ group, allStudents, allGroups = [
                   <option value="">Selectează grupa</option>
                   {allGroups.map(g => (
                     <option key={g.id} value={g.id}>
-                      {g.name} {g.course?.title ? `(${g.course.title})` : ''}
+                      {g.name} {g.level ? `(${g.level})` : ''}
                     </option>
                   ))}
                 </select>

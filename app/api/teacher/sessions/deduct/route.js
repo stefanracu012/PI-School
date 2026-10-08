@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { notifyLowLessons } from '@/lib/telegram'
+import { syncSessionSalary } from '@/lib/salary'
 
 export async function POST(request) {
   const session = await getServerSession(authOptions)
@@ -61,15 +61,15 @@ export async function POST(request) {
       if (!groupStudent) continue
 
       if (attendance.status === 'PRESENT') {
-        // Deduct one lesson for present students
-        await prisma.groupStudent.update({
-          where: { id: groupStudent.id },
-          data: {
-            lessonsRemaining: { decrement: 1 }
-          }
-        })
+        // La grupele plătite individual, prezența consumă o lecție din pachetul
+        // elevului. La cele lunare, socoteala e a grupei — nu se scade nimic.
+        if (lessonSession.group.billingType === 'INDIVIDUAL') {
+          await prisma.groupStudent.update({
+            where: { id: groupStudent.id },
+            data: { lessonsRemaining: { decrement: 1 } },
+          })
+        }
 
-        // Create transaction record
         transactions.push({
           studentId: attendance.studentId,
           groupId: lessonSession.groupId,
@@ -101,82 +101,12 @@ export async function POST(request) {
       data: { lessonsDeducted: true }
     })
 
-    // ============================================
-    // CREATE REAL-TIME NOTIFICATIONS FOR LOW/ZERO/NEGATIVE LESSONS
-    // ============================================
-    const groupStudentsAfterDeduction = await prisma.groupStudent.findMany({
-      where: {
-        groupId: lessonSession.groupId,
-        status: 'ACTIVE',
-        lessonsRemaining: { lte: 3 }
-      },
-      include: {
-        student: true,
-        group: {
-          include: {
-            course: { select: { title: true } }
-          }
-        }
-      }
-    })
+    // Lecția ținută intră în salariul profesorului, după regula grupei
+    await syncSessionSalary(sessionId)
 
-    for (const gs of groupStudentsAfterDeduction) {
-      const lessons = gs.lessonsRemaining
-      let type, title, message
-
-      if (lessons < 0) {
-        type = 'NEGATIVE_LESSONS'
-        title = `🔴 ${gs.student.fullName} are ${lessons} lecții!`
-        message = `Elevul ${gs.student.fullName} din grupa "${gs.group.name}" are lecții negative (${lessons}). Necesită atenție imediată!`
-      } else if (lessons === 0) {
-        type = 'ZERO_LESSONS'
-        title = `⚠️ ${gs.student.fullName} a rămas fără lecții`
-        message = `Elevul ${gs.student.fullName} din grupa "${gs.group.name}" are 0 lecții rămase. Contactați părinții pentru reînnoire.`
-      } else {
-        type = 'LOW_LESSONS'
-        title = `📉 ${gs.student.fullName} are doar ${lessons} lecții`
-        message = `Elevul ${gs.student.fullName} din grupa "${gs.group.name}" (${gs.group.course.title}) mai are doar ${lessons} lecții.`
-      }
-
-      // Check if similar notification exists in last 24 hours
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-      
-      const existingNotification = await prisma.notification.findFirst({
-        where: {
-          type,
-          studentId: gs.studentId,
-          groupId: gs.groupId,
-          createdAt: { gte: oneDayAgo }
-        }
-      })
-
-      if (!existingNotification) {
-        await prisma.notification.create({
-          data: {
-            type,
-            title,
-            message,
-            link: `/admin/students/${gs.studentId}`,
-            recipientId: null, // For all admins
-            studentId: gs.studentId,
-            groupId: gs.groupId,
-            data: { 
-              lessonsRemaining: lessons,
-              groupName: gs.group.name,
-              courseName: gs.group.course.title
-            }
-          }
-        })
-
-        // Trimite și pe Telegram
-        await notifyLowLessons(
-          gs.student.fullName,
-          gs.group.name,
-          gs.group.course.title,
-          lessons
-        )
-      }
-    }
+    // Lecțiile rămase se urmăresc per grupă, în pachetul lunar — nu mai
+    // trimitem alerte pentru fiecare elev în parte. Cron-ul zilnic anunță o
+    // singură dată pe grupă, când pachetul lunii se apropie de final.
 
     return NextResponse.json({ success: true, deducted: transactions.length })
   } catch (error) {

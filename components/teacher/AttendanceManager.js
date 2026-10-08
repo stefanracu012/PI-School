@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { CheckIcon, XMarkIcon, MinusIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 
-export default function AttendanceManager({ sessionId, groupId, students, lessonsDeducted, isExpired = false, sessionDate }) {
+export default function AttendanceManager({ sessionId, groupId, students, lessonsDeducted, isExpired = false, sessionDate, billingType = 'MONTHLY' }) {
   const router = useRouter()
   const [attendances, setAttendances] = useState(() => {
     const initial = {}
@@ -130,8 +130,8 @@ export default function AttendanceManager({ sessionId, groupId, students, lesson
         <div>
           <h2 className="text-base xs:text-lg md:text-xl font-bold text-gray-900">Marcarea Prezenței</h2>
           <p className="text-gray-600 text-xs xs:text-sm mt-1">
-            Prezenți: <span className="font-medium text-green-600">{presentCount}</span> | 
-            Absenți: <span className="font-medium text-red-600">{absentCount}</span> | 
+            Prezenți: <span className="font-medium text-green-600">{presentCount}</span> |
+            Absenți: <span className="font-medium text-red-600">{absentCount}</span> |
             Nemarcați: <span className="font-medium text-gray-600">{students.length - presentCount - absentCount}</span>
           </p>
         </div>
@@ -181,7 +181,9 @@ export default function AttendanceManager({ sessionId, groupId, students, lesson
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-gray-900 text-xs xs:text-sm md:text-base truncate">{gs.student?.fullName || 'Elev'}</p>
                   <div className="flex flex-col xs:flex-row xs:items-center xs:gap-2 text-[10px] xs:text-xs md:text-sm text-gray-500">
-                    <span className="whitespace-nowrap">Lecții: <span className="font-medium">{gs.lessonsRemaining}</span></span>
+                    {billingType === 'INDIVIDUAL' && (
+                      <span className="whitespace-nowrap">Lecții: <span className="font-medium">{gs.lessonsRemaining}</span></span>
+                    )}
                     {(studentNotes[gs.studentId] || gs.attendance?.notes) && (
                       <span className="text-teal-600 whitespace-nowrap"><span className="hidden xs:inline">•</span> Are notițe</span>
                     )}
@@ -258,7 +260,7 @@ export default function AttendanceManager({ sessionId, groupId, students, lesson
                   <label className="block text-xs xs:text-sm font-medium text-gray-700 mb-1.5 xs:mb-2">
                     Notițe pentru {gs.student?.fullName?.split(' ')[0] || 'elev'}
                   </label>
-                  
+
                   {isExpired ? (
                     // Read-only mode after 24h
                     <div>

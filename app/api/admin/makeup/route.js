@@ -54,7 +54,7 @@ export async function POST(request) {
           select: { id: true, name: true, email: true }
         },
         group: {
-          include: { course: true }
+          include: {}
         },
         branch: {
           select: { id: true, name: true }
@@ -110,9 +110,7 @@ export async function GET(request) {
           }
         },
         group: {
-          include: {
-            course: true
-          }
+          include: {}
         },
         branch: {
           select: {
@@ -198,7 +196,6 @@ export async function GET(request) {
         student: true,
         group: {
           include: {
-            course: true,
             teacher: {
               select: {
                 id: true,

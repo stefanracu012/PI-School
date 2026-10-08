@@ -1,4 +1,6 @@
-// Prisma schema for PISchool - MongoDB
+// Prisma schema for PI School CRM - MongoDB
+// CRM-ul (elevi, grupe, lead-uri, plăți...) e același ca la Olla English;
+// la final sunt modelele site-ului public PI School (cursuri, înscrieri, recenzii, contact).
 
 generator client {
   provider = "prisma-client-js"
@@ -17,12 +19,17 @@ model User {
   password          String?   // null for Google-only users (Argon2id hash)
   name              String?
   phone             String?   // Număr de telefon (opțional)
-  telegramChatId    String?   // Chat ID pentru notificări Telegram
+  telegramChatId    String?   // Chat ID pentru notificări Telegram (completat automat la /start)
+  telegramUsername  String?   // @username-ul de Telegram, pentru afișare
+  telegramLinkToken String?   // Token de unică folosință pentru linkul de conectare
+  telegramLinkExpires DateTime? // Expirarea token-ului de conectare
   image             String?
   role              Role      @default(TEACHER)
   permissions       String[]  @default([]) // Granular permissions for ADMIN
   emailVerified     DateTime?
   active            Boolean   @default(true)
+  superTeacher      Boolean   @default(false) // Profesor "super" - poate porni lecții la orice dată/oră, fără restricții de program
+  canViewAllSchedules Boolean @default(false) // Profesorul vede orarul intregii scoli, nu doar grupele lui
   
   // 2FA fields
   twoFactorEnabled  Boolean   @default(false)
@@ -47,6 +54,14 @@ model User {
   auditLogs         AuditLog[]        @relation("UserAuditLogs")
   createdStudents   Student[]         @relation("CreatedStudents")
   createdPayments   Payment[]         @relation("CreatedPayments")
+  createdProblems   Problem[]         @relation("CreatedProblems")
+  createdSets       GeneratedSet[]    @relation("CreatedSets")
+  bonusPointsAdded  BonusPoint[]      @relation("BonusPointsAdded")
+  createdLeads      Lead[]            @relation("CreatedLeads")
+  assignedLeads     Lead[]            @relation("AssignedLeads")
+  teacherTrials     TrialLesson[]     @relation("TeacherTrials")
+  createdTrials     TrialLesson[]     @relation("CreatedTrials")
+  createdLessonPackages GroupLessonPackage[] @relation("CreatedLessonPackages")
 
   @@map("users")
 }
@@ -158,7 +173,7 @@ model AuditLog {
   action      String    // "login", "login_failed", "2fa_setup", "2fa_verify", "create_user", "change_role", "export", "delete", etc.
   actorId     String?   @db.ObjectId // User who performed the action (null for anonymous)
   targetId    String?   // Target resource ID (userId, resourceId, etc.)
-  targetType  String?   // "user", "course", "group", etc.
+  targetType  String?   // "user", "group", "student", etc.
   ipAddress   String?
   deviceId    String?
   userAgent   String?
@@ -214,107 +229,47 @@ model CaptchaState {
   @@map("captcha_states")
 }
 
-// ==================== COURSES ====================
-
-model Course {
-  id               String    @id @default(auto()) @map("_id") @db.ObjectId
-  title            String
-  slug             String    @unique
-  descriptionShort String
-  descriptionLong  String?
-  category         String?
-  level            String?   // "Începător", "Intermediar", "Avansat"
-  ageMin           Int?
-  ageMax           Int?
-  duration         String?   // "60 min", "90 min"
-  lessonsCount     Int?
-  price            Float     @default(0)
-  discountPrice    Float?    // Prețul redus (opțional)
-  seatsTotal       Int       @default(10)
-  active           Boolean   @default(true)
-  imageUrl         String?   // Imagine principală (deprecated, se folosește mainImageUrl)
-  mainImageUrl     String?   // Imaginea principală selectată
-  images           String[]  // Array de URL-uri pentru toate imaginile
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  // Relations
-  enrollments Enrollment[]
-  groups      Group[]
-  reviews     Review[]
-
-  @@map("courses")
-}
-
-// ==================== ENROLLMENTS (LEADS) ====================
-
-model Enrollment {
-  id            String           @id @default(auto()) @map("_id") @db.ObjectId
-  courseId      String           @db.ObjectId
-  studentName   String
-  studentAge    Int?
-  parentName    String
-  parentPhone   String
-  parentEmail   String
-  city          String?
-  observations  String?
-  status        EnrollmentStatus @default(NEW)
-  notes         String?          // Legacy - kept for backwards compatibility
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-
-  // Relations
-  course        Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  enrollmentNotes EnrollmentNote[] @relation("EnrollmentNotes")
-
-  @@map("enrollments")
-}
-
-model EnrollmentNote {
-  id           String   @id @default(auto()) @map("_id") @db.ObjectId
-  enrollmentId String?  @db.ObjectId
-  inscriereId  String?  @db.ObjectId
-  content      String
-  createdAt    DateTime @default(now())
-  
-  // Relations
-  enrollment   Enrollment? @relation("EnrollmentNotes", fields: [enrollmentId], references: [id], onDelete: Cascade)
-  inscriere    Inscriere?  @relation("InscriereNotes", fields: [inscriereId], references: [id], onDelete: Cascade)
-  
-  @@map("enrollment_notes")
-}
-
-enum EnrollmentStatus {
-  LEAD              // 🔵 Lead
-  FARA_RASPUNS      // 🔘 Fără Răspuns
-  CONTACTAT         // 🟡 Contactat
-  PROGRAMAT         // 🟠 Programat
-  PRIMA_LECTIE      // 🟢 Prima Lecție
-  FINALIZAT_LECTIA  // ⚫ Finalizat Lecția
-  SE_GANDESTE       // 🔘 Se Gândește
-  ASTEPTAM_PLATA    // 💵 Așteptăm Plata
-  PLATIT            // 💰 Plătit
-  STUDIAZA          // 🟣 Studiază
-  PLECAT            // 🔴 Plecat
-  LOST_LEAD         // ❌ Lost Lead
-  TEST              // 🧪 Test
-  // Legacy statuses for backwards compatibility
-  NEW
-  CONTACTED
-  CONFIRMED
-  REJECTED
-}
-
 // ==================== STUDENTS ====================
 
 model Student {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId
   fullName     String
   age          Int?
+  isAdult      Boolean @default(false) // Elev adult — fără părinte și fără clasă
+  level        String?  // Nivelul (Clasa a 5-a, Bacalaureat, Olimpiadă… — vezi lib/levels.js)
   parentName   String?
   parentPhone  String?
   parentEmail  String?
   notes        String?
+  accessToken  String?  // token persistent pentru portalul elevului /learn/[token] (unique enforced in app code)
+  password     String?  // hash parolă opțional pentru autentificare alternativă (Argon2id)
+  active       Boolean  @default(true) // dacă e false, /learn/[token] returnează acces interzis
+  superStudent Boolean  @default(false) // Super elev — accesează orice lecție din orice modul, indiferent de progres
+  grade        Int?     // Clasa elevului (1-12); null = nespecificată
+
+  // Luna în care începe elevul — poate fi peste luni sau ani, până atunci
+  // stă în listă fără grupă. null = începe imediat / nespecificat.
+  startYear    Int?
+  startMonth   Int?     // 1-12
+
+  // Cum invata: singur sau in grupa, online sau la sediu
+  lessonType   String?  // 'grup' | 'individual'
+  locationType String?  // 'online' | 'offline'
+
+  // Limite per-elev (override peste grupă/global; null = folosește valoarea super-setării)
+  cooldownOverrideMin Int?     // în minute, null = moștenește de la grupă/global
+  dailyXpCapOverride  Int?     // în puncte XP, null = moștenește
+  cooldownDisabled    Boolean  @default(false) // dezactivează explicit cooldown pentru acest elev
+  xpCapDisabled       Boolean  @default(false) // dezactivează explicit cap-ul de XP
+  lastProblemSolvedAt DateTime? // pentru calcul cooldown
+  lastSolvedLessonId  String?   // lecția în care s-a rezolvat ultima problemă (cooldown per lecție)
+
+  // Single-session enforcement: doar 1 browser activ per cont la /learn/[token]
+  activeSessionId  String?   // ID-ul ultimului browser care a făcut „claim"
+  activeSessionAt  DateTime? // când a fost ultima dată activ
+  activeSessionIp  String?   // IP-ul (informativ, pentru audit)
+  activeSessionUA  String?   // User-Agent (informativ, pentru audit)
+
   createdById  String?  @db.ObjectId // ID-ul userului care a creat elevul (profesor sau admin)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -322,13 +277,85 @@ model Student {
   // Relations
   createdBy            User?     @relation("CreatedStudents", fields: [createdById], references: [id], onDelete: SetNull)
   groupStudents        GroupStudent[]
+  trialLessons         TrialLesson[]        @relation("StudentTrials")
   attendances          Attendance[]
   lessonTransactions   LessonTransaction[]
   makeupLessonStudents MakeupLessonStudent[]
   notifications        Notification[]
+  problemAttempts      ProblemAttempt[]
+  generatedSets        GeneratedSet[]
+  moduleAccesses       ModuleAccess[]
+  moduleAdvances       ModuleAdvance[]
+  hiddenModules        ModuleHidden[]
+  lessonAccesses       LessonAccess[]
+  lessonProgresses     LessonProgress[]
+  problemSubmissions   ProblemSubmission[]
+  learningPayments     LearningPayment[]
+  bonusPoints          BonusPoint[]
+
+  // Gamification 2.0
+  economy              StudentEconomy?
+  streak               StudentStreak?
+  inventory            CosmeticInventory[]
+  equipped             EquippedCosmetic[]
+  chestOpenings        ChestOpening[]
+  leaderboardEntries   LeaderboardEntry[]
+  rewardClaims         RewardClaim[]
+  activeThemeId        String?            @db.ObjectId
 
   @@index([createdById])
+  @@index([accessToken])
+  @@index([active])
   @@map("students")
+}
+
+// ==================== BONUS POINTS ====================
+
+model BonusPoint {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId String   @db.ObjectId
+  points    Int
+  reason    String
+  addedById String   @db.ObjectId
+  createdAt DateTime @default(now())
+
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  addedBy   User     @relation("BonusPointsAdded", fields: [addedById], references: [id])
+
+  @@index([studentId])
+  @@map("bonus_points")
+}
+
+// ==================== SYSTEM SETTINGS (singleton) ====================
+// Setări globale: cooldown probleme, cap XP zilnic, curba de niveluri.
+// Doar UN singur rând în acest model (singleton); creat la primul GET dacă lipsește.
+
+model SystemSettings {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  // Cooldown între rezolvarea a 2 probleme (în minute). Default 4h = 240 min.
+  problemCooldownMin  Int      @default(240)
+  cooldownEnabled     Boolean  @default(true)
+
+  // Cap zilnic de XP per elev. Default 500 XP/zi.
+  dailyXpCap          Int      @default(500)
+  xpCapEnabled        Boolean  @default(true)
+
+  // Curba de niveluri — array crescator de praguri XP. Index 0 = nivel 1.
+  // Default progresie exponențială dificil de atins la niveluri mari.
+  levelCurve          Int[]    @default([0, 100, 300, 700, 1500, 3000, 6000, 12000, 25000, 50000])
+  levelNames          String[] @default(["Novice","Explorator","Practicant","Expert","Master","Legend","Mythic","Titan","Sage","Immortal"])
+
+  // Conversațiile de pe Messenger/Instagram devin lead-uri automat.
+  // Comutatorul stă în Securitate și e vizibil doar SUPERADMIN-ului.
+  metaLeadsEnabled     Boolean   @default(false)
+  metaLeadsLastSyncAt  DateTime?
+  metaLeadsCreated     Int       @default(0)
+
+  updatedAt           DateTime @updatedAt
+  updatedById         String?  @db.ObjectId
+
+  @@map("system_settings")
 }
 
 // ==================== BRANCHES (FILIALE) ====================
@@ -353,7 +380,8 @@ model Branch {
 model Group {
   id              String   @id @default(auto()) @map("_id") @db.ObjectId
   name            String
-  courseId        String   @db.ObjectId
+  level           String?  // Nivelul grupei: "Clasa a 5-a", "Bacalaureat", "Olimpiadă" etc.
+  courseId        String?  @db.ObjectId // Cursul de pe site (opțional; grupele vechi PI School îl au)
   teacherId       String   @db.ObjectId
   branchId        String?  @db.ObjectId // Filiala (opțional)
   scheduleDays    String[] // ["Mon", "Wed"]
@@ -361,12 +389,38 @@ model Group {
   locationType    String?  // "offline" / "online"
   locationDetails String?  // Sala/Link
   startDate       DateTime?
+  notes           String?  // Detalii despre grupă (manual, condiții, observații)
+
+  // Cum se plătește: lunar pe grupă (implicit) sau individual, pe lecții
+  billingType     BillingType @default(MONTHLY)
+  monthlyLessons  Int      @default(8) // Câte lecții se achită lunar pentru grupă (poate fi suprascris pe o lună anume)
+
+  // Cât primește profesorul pentru o lecție ținută cu grupa. Fără setare,
+  // lecțiile nu se adaugă singure la salariu.
+  salaryType      SalaryType?
+  salaryAmount    Float?   // lei: pe lecție (FIXED) sau pe elev prezent (PER_PRESENCE)
+
+  // Lecție de probă: eveniment unic, cu dată și oră proprie, fără orar săptămânal
+  isTrial         Boolean  @default(false)
+  trialDate       DateTime?
   active          Boolean  @default(true)
+
+  // Grupa și-a încheiat cursul. Rămâne cu tot istoricul, dar iese din
+  // liste, din orar și din notificări — altfel încurcă la fiecare pas.
+  completedAt     DateTime?
+  completedById   String?  @db.ObjectId
+
+  // Limite per-grupă (override peste global; null = moștenește)
+  cooldownOverrideMin Int?
+  dailyXpCapOverride  Int?
+  cooldownDisabled    Boolean @default(false)
+  xpCapDisabled       Boolean @default(false)
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   // Relations
-  course              Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course              Course?             @relation(fields: [courseId], references: [id], onDelete: SetNull)
   teacher             User                @relation("TeacherGroups", fields: [teacherId], references: [id], onDelete: Cascade)
   branch              Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
   groupStudents       GroupStudent[]
@@ -374,8 +428,35 @@ model Group {
   lessonTransactions  LessonTransaction[]
   makeupLessons       MakeupLesson[]
   missedSessions      MissedSession[]
+  lessonPackages      GroupLessonPackage[]
+  trialLessons        TrialLesson[]       @relation("GroupTrials")
 
   @@map("groups")
+}
+
+// ==================== PACHETE LUNARE DE LECȚII (per grupă) ====================
+// Câte lecții s-au achitat pentru grupă într-o lună (de regulă 8).
+// Lecțiile efectuate se numără din LessonSession-urile lunii respective;
+// pachetul e informativ și nu afectează contorul de lecții per elev.
+
+model GroupLessonPackage {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  groupId      String   @db.ObjectId
+  year         Int
+  month        Int      // 1–12
+  totalLessons Int      @default(8)
+  notes        String?
+  createdById  String?  @db.ObjectId
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  group     Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("CreatedLessonPackages", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([groupId, year, month])
+  @@index([groupId])
+  @@map("group_lesson_packages")
 }
 
 // ==================== GROUP-STUDENT PIVOT ====================
@@ -398,6 +479,11 @@ model GroupStudent {
 
   @@unique([groupId, studentId])
   @@map("group_students")
+}
+
+enum BillingType {
+  MONTHLY    // grupa are N lecții pe lună, achitate indiferent de prezență
+  INDIVIDUAL // fiecare elev cumpără un număr de lecții, care se consumă la prezență
 }
 
 enum GroupStudentStatus {
@@ -521,26 +607,6 @@ enum MakeupLessonStudentStatus {
   ABSENT
 }
 
-// ==================== REVIEWS ====================
-
-model Review {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  authorName String
-  roleLabel  String?  // "Părinte", "Elev"
-  rating     Int      @default(5) // 1-5
-  message    String
-  avatarUrl  String?
-  courseId   String?  @db.ObjectId
-  published  Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  // Relations
-  course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
-
-  @@map("reviews")
-}
-
 // ==================== NOTIFICATIONS ====================
 
 model Notification {
@@ -575,31 +641,1111 @@ enum NotificationType {
   MISSED_SESSION         // Lecție ratată
   LATE_SESSION           // Lecție nepornită (2+ ore întârziere)
   CANCELLED_SESSION      // Lecție anulată de profesor
+  REVISION_REQUEST       // Profesorul a cerut refacerea unei probleme
+  LEAD_FOLLOWUP          // Lead de recontactat azi
 }
 
 // ==================== PAYMENTS ====================
 
 model Payment {
   id             String        @id @default(auto()) @map("_id") @db.ObjectId
-  groupStudentId String        @db.ObjectId
+  groupStudentId String?       @db.ObjectId  // Opțional: rămâne NULL dacă elevul/grupa au fost șterse
   amount         Float         // Suma achitată (RON)
   paymentDate    DateTime      @default(now())
+  // Luna acoperită de plată (nu ziua în care a intrat banul)
+  forYear        Int?
+  forMonth       Int?          // 1–12
   paymentMethod  String?       // "cash", "card", "transfer"
   notes          String?       // Notițe adiționale
   lessonsAdded   Int?          // Câte lecții s-au adăugat pentru această plată
+  // Cât a rămas de plată după această tranșă. 0 sau null = achitat integral.
+  debt           Float?
   createdById    String?       @db.ObjectId // Cine a înregistrat plata (profesor sau admin)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
+  // Snapshot pentru păstrare istoric când entitățile asociate sunt șterse
+  studentNameSnapshot  String?  // Numele elevului la momentul plății
+  groupNameSnapshot    String?  // Numele grupei la momentul plății
+  levelSnapshot        String?  // Nivelul grupei la momentul plății
+
   // Relations
-  groupStudent GroupStudent @relation(fields: [groupStudentId], references: [id], onDelete: Cascade)
-  createdBy    User?        @relation("CreatedPayments", fields: [createdById], references: [id], onDelete: SetNull)
+  groupStudent GroupStudent? @relation(fields: [groupStudentId], references: [id], onDelete: SetNull)
+  createdBy    User?         @relation("CreatedPayments", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([createdById])
   @@map("payments")
 }
 
-// ==================== INSCRIERI (FORMULARE PUBLICE) ====================
+// ==================== LEADS (PIPELINE VÂNZĂRI) ====================
+
+/// Un copil de pe un lead. Un părinte poate întreba pentru doi-trei odată,
+/// fiecare cu vârsta și nivelul lui — la conversie iese câte un elev de fiecare.
+type LeadChild {
+  name         String
+  age          Int?
+  isAdult      Boolean @default(false)
+  level        String?  // Nivelul dorit: Clasa a 7-a, Bacalaureat…
+  lessonType   String?  // 'grup' | 'individual'
+  locationType String?  // 'online' | 'offline'
+}
+
+model Lead {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  name         String     // Persoana de contact (părinte sau viitorul elev)
+  phone        String?
+  email        String?
+  source       LeadSource @default(ALTA)
+  sourceDetail String?    // @user Instagram, numărul de WhatsApp, cine a recomandat...
+  message      String?    // Mesajul primit / contextul discuției
+
+  // Cine învață — poate fi altcineva decât persoana de contact
+  studentName  String?
+  studentAge   Int?
+  isAdult      Boolean @default(false) // Adult — nu are rost o vârstă exactă
+  interestedIn String?    // Nivelul dorit: Clasa a 7-a, Bacalaureat, Olimpiadă...
+  lessonType   String?    // Preferinta: 'grup' | 'individual'
+  locationType String?    // Preferinta: 'online' | 'offline'
+
+  status         LeadStatus @default(LEAD)
+  nextFollowUpAt DateTime?  // Când trebuie recontactat
+  notes          String?    // Legacy — notițele noi stau în LeadNote
+
+  // Lead venit dintr-o conversație Meta — ține legătura, ca să nu se dubleze
+  metaConversationId String?  // id-ul conversației de pe Messenger/Instagram
+  metaPlatform       String?  // 'messenger' | 'instagram'
+  metaPersonId       String?  // id-ul persoanei, pentru răspuns direct
+  metaLastMessageAt  DateTime? // ultimul mesaj al ei pe care l-am procesat
+
+  createdById        String?  @db.ObjectId // Cine a introdus lead-ul în CRM
+  assignedToId       String?  @db.ObjectId // Cine se ocupă de acest lead
+  followUpNotifiedAt DateTime? // Când s-a trimis ultima notificare de recontactare
+  convertedStudentId String?  @db.ObjectId // Elevul creat din acest lead
+  convertedStudentIds String[] @db.ObjectId // Toți elevii creați (un lead poate avea mai mulți copii)
+
+  // Copiii pentru care se interesează. Primul e oglindit în câmpurile
+  // studentName / studentAge / interestedIn de mai sus, ca tot ce citea
+  // dinainte un singur elev să meargă mai departe neschimbat.
+  children LeadChild[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  createdBy  User?     @relation("CreatedLeads", fields: [createdById], references: [id], onDelete: SetNull)
+  assignedTo User?     @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  leadNotes LeadNote[] @relation("LeadNotes")
+  trials    TrialLesson[] @relation("LeadTrials")
+
+  @@index([status])
+  @@index([metaConversationId])
+  @@index([source])
+  @@index([createdAt])
+  @@index([nextFollowUpAt])
+  @@index([assignedToId])
+  @@map("leads")
+}
+
+model LeadNote {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  leadId     String   @db.ObjectId
+  content    String
+  authorName String?  // Cine a scris notița
+  createdAt  DateTime @default(now())
+
+  lead Lead @relation("LeadNotes", fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_notes")
+}
+
+enum LeadSource {
+  INSTAGRAM
+  MESSENGER
+  FACEBOOK
+  WHATSAPP
+  TELEGRAM
+  TIKTOK
+  TELEFON
+  RECOMANDARE
+  WALK_IN
+  SITE
+  ELEV      // Creat automat din pagina Elevi
+  ALTA
+}
+
+enum LeadStatus {
+  LEAD              // 🔵 Lead nou
+  FARA_RASPUNS      // 🔘 Fără răspuns
+  CONTACTAT         // 🟡 Contactat
+  FOLLOW_UP_1       // 📞 Prima revenire după contact
+  FOLLOW_UP_2       // 📲 A doua revenire
+  FOLLOW_UP_2_PLUS  // 🔁 Mai mult de două reveniri
+  PROGRAMAT_TESTARE // 📝 Programat la testare
+  PROGRAMAT         // 🟠 Programat la lecție
+  PRIMA_LECTIE      // 🟢 A venit la prima lecție
+  FINALIZAT_LECTIA  // ⚫ A terminat lecția de probă
+  SE_GANDESTE       // 🔘 Se gândește
+  INTERESAT_MAI_TARZIU // 🗓️ Revine mai târziu — nu acum, dar nu e pierdut
+  WAITLIST          // 📋 Listă de așteptare (locuri ocupate / grupă în formare)
+  ASTEPTAM_PLATA    // 💵 Așteptăm plata
+  PLATIT            // 💰 A plătit
+  STUDIAZA          // 🟣 Studiază (convertit)
+  PLECAT            // 🔴 A plecat
+  LOST_LEAD         // ❌ Lead pierdut
+  OLD_STUDENT       // 🎒 Fost elev — a mai studiat la noi
+  TEST              // 🧪 Test
+}
+
+// ==================== MISSED SESSIONS (LECȚII RATATE) ====================
+
+model MissedSession {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  groupId        String   @db.ObjectId
+  scheduledDate  DateTime // Data și ora când trebuia să fie lecția
+  scheduledDay   String   // Ziua programată (ex: "Mon", "Wed")
+  scheduledTime  String   // Ora programată (ex: "18:00")
+  reason         String?  // Motivul (ex: "Profesorul nu a pornit lecția la timp")
+  acknowledged   Boolean  @default(false) // Dacă admin-ul a văzut/confirmat
+  createdAt      DateTime @default(now())
+
+  // Relations
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("missed_sessions")
+}
+
+// ==================== PROBLEM BANK ====================
+
+model Problem {
+  id             String           @id @default(auto()) @map("_id") @db.ObjectId
+  title          String
+  description    String           // Cerința problemei (markdown)
+  difficulty     ProblemDifficulty @default(EASY)
+  topic          String           // ex: "loops", "arrays", "functions"
+  subtopic       String?
+  type           ProblemType      @default(MULTIPLE_CHOICE)
+
+  // Pentru MULTIPLE_CHOICE: array de variante; correctAnswer = textul corect
+  // Pentru CODING: starterCode opțional; expectedOutput sau testCases
+  // Pentru SHORT_ANSWER / IO: correctAnswer e răspunsul exact (case-insensitive trim)
+  options        String[]         @default([])  // doar pentru grilă
+  correctAnswer  String?          // răspunsul corect (text/literă/output)
+  starterCode    String?          // pentru coding
+  testCases      Json?            // [{ input, expectedOutput }] pentru coding (opțional)
+
+  explanation    String           // EXPLICAȚIA — pas cu pas, AI-like
+  hint           String?          // Hint progresiv
+
+  tags           String[]         @default([])
+  estimatedTime  Int              @default(5)   // minute
+  points         Int              @default(10)
+  language       String?          // "python", "javascript" etc. pentru coding
+
+  lessonId       String?          @db.ObjectId  // opțional: aparține unei lecții dintr-un modul
+  lessonOrder    Int?                            // ordinea în lecție
+  active         Boolean          @default(true)
+
+  createdById    String?          @db.ObjectId
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  // Relations
+  lesson         Lesson?          @relation("LessonProblems", fields: [lessonId], references: [id], onDelete: SetNull)
+  createdBy      User?            @relation("CreatedProblems", fields: [createdById], references: [id], onDelete: SetNull)
+  attempts       ProblemAttempt[]
+  setProblems    SetProblem[]
+  submissions    ProblemSubmission[]
+
+  @@index([difficulty, topic, active])
+  @@index([topic])
+  @@index([lessonId, lessonOrder])
+  @@map("problems")
+}
+
+enum ProblemDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum ProblemType {
+  MULTIPLE_CHOICE   // grilă (o singură variantă corectă)
+  MULTIPLE_SELECT   // grilă cu mai multe variante corecte (checkbox)
+  SHORT_ANSWER      // răspuns scurt text
+  CODING            // cod
+  INPUT_OUTPUT      // I/O — verifică output exact
+  ORDER_IMAGES      // ordonare imagini
+  FILL_IN           // completează spațiile (mai multe input-uri inline)
+  DRAG_BLOCKS       // trage blocuri/token-uri în locuri goale (sloturi separate)
+  DRAG_INLINE       // trage token-uri direct în text (ex: 12 ___ + 36 ___ = ___)
+}
+
+model GeneratedSet {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  title          String
+  studentId      String?       @db.ObjectId   // opțional - poate fi un set fără elev anume
+  config         Json?         // { difficulty, topic, count, mix } - cum a fost generat
+  
+  // Politica afișării explicațiilor
+  explanationPolicy ExplanationPolicy @default(AFTER_ANSWER)
+
+  // Token unic pentru link public (elevul accesează fără cont)
+  accessToken    String        @unique
+
+  timeLimit      Int?          // minute (opțional)
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  createdById    String?       @db.ObjectId
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  student        Student?      @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  createdBy      User?         @relation("CreatedSets", fields: [createdById], references: [id], onDelete: SetNull)
+  setProblems    SetProblem[]
+  attempts       ProblemAttempt[]
+
+  @@index([studentId])
+  @@map("generated_sets")
+}
+
+enum ExplanationPolicy {
+  ALWAYS         // ✅ Vezi oricând
+  AFTER_ANSWER   // ❌ Doar după ce răspunzi
+  AFTER_SET      // ❌ Doar după ce termini setul
+}
+
+model SetProblem {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  setId       String       @db.ObjectId
+  problemId   String       @db.ObjectId
+  order       Int          @default(0)
+
+  set         GeneratedSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  problem     Problem      @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@unique([setId, problemId])
+  @@map("set_problems")
+}
+
+model ProblemAttempt {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String?  @db.ObjectId
+  problemId   String   @db.ObjectId
+  setId       String?  @db.ObjectId
+
+  answer      String   // ce a trimis elevul
+  isCorrect   Boolean  @default(false)
+  attempts    Int      @default(1)   // câte încercări la această problemă
+  timeSpent   Int      @default(0)   // secunde
+  pointsAwarded Int    @default(0)
+  
+  createdAt   DateTime @default(now())
+
+  student     Student?       @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  problem     Problem        @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  set         GeneratedSet?  @relation(fields: [setId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, problemId])
+  @@index([setId])
+  @@index([problemId])
+  @@map("problem_attempts")
+}
+
+// ==================== LEARNING MODULES ====================
+
+model LearningModule {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  slug           String    @unique
+  title          String
+  description    String?
+  language       String?
+  coverImage     String?
+  order          Int       @default(0)
+  active         Boolean   @default(true)
+  grades         Int[]     @default([]) // Clasele la care e vizibil modulul (1-9); gol = vizibil pentru toți
+  createdById    String?   @db.ObjectId
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  lessons        Lesson[]
+  accesses       ModuleAccess[]
+  advances       ModuleAdvance[]
+  hiddenModules  ModuleHidden[]
+
+  @@index([order, active])
+  @@map("learning_modules")
+}
+
+model Lesson {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  moduleId       String    @db.ObjectId
+  title          String
+  slug           String
+  order          Int       @default(0)
+  isFree         Boolean   @default(false) // admin alege: true = trial gratuit, false = necesită acces
+  theory         String    // markdown / rich text
+  videoUrl       String?
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  module         LearningModule      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  problems       Problem[]           @relation("LessonProblems")
+  progresses     LessonProgress[]
+  submissions    ProblemSubmission[]
+  accesses       LessonAccess[]
+
+  @@unique([moduleId, slug])
+  @@index([moduleId, order])
+  @@map("lessons")
+}
+
+model ModuleAccess {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String   @db.ObjectId
+  moduleId    String   @db.ObjectId
+  source      String?  // "trial" | "paid" | "granted"
+  grantedById String?  @db.ObjectId
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  module      LearningModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, moduleId])
+  @@map("module_accesses")
+}
+
+model ModuleAdvance {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String   @db.ObjectId
+  moduleId    String   @db.ObjectId  // după acest modul i se permite avansarea la următorul
+  grantedById String?  @db.ObjectId
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  module      LearningModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, moduleId])
+  @@map("module_advances")
+}
+
+model ModuleHidden {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String   @db.ObjectId
+  moduleId    String   @db.ObjectId
+  createdAt   DateTime @default(now())
+
+  student     Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  module      LearningModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, moduleId])
+  @@map("module_hidden")
+}
+
+model LessonAccess {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String   @db.ObjectId
+  lessonId    String   @db.ObjectId
+  grantedById String?  @db.ObjectId
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, lessonId])
+  @@map("lesson_accesses")
+}
+
+model LessonProgress {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  studentId           String    @db.ObjectId
+  lessonId            String    @db.ObjectId
+  theoryCompleted     Boolean   @default(false)
+  currentProblemIndex Int       @default(0)
+  hintsUsed           String[]  @default([]) // problemId-uri pentru care s-a apăsat hint
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  student             Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lesson              Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, lessonId])
+  @@index([studentId])
+  @@map("lesson_progresses")
+}
+
+model ProblemSubmission {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String           @db.ObjectId
+  problemId   String           @db.ObjectId
+  lessonId    String?          @db.ObjectId
+
+  answer      String?
+  code        String?
+  status      SubmissionStatus @default(PENDING)
+  autoCorrect Boolean?         // true = verificare automată a trecut, false = nu, null = n/a
+  grade       Int?             // 0-100
+  feedback    String?
+
+  gradedById  String?          @db.ObjectId
+  gradedAt    DateTime?
+
+  source      String?          // "lesson" | "random"
+  difficulty  String?          // pentru random
+  timeSpent   Int              @default(0)
+
+  // Sistem de încercări/hint/rezolvare
+  attemptNumber  Int     @default(1) // a câta încercare la această problemă
+  hintUsed       Boolean @default(false) // hint a fost văzut înainte de submit
+  solutionViewed Boolean @default(false) // elevul a apăsat „Vezi rezolvarea" (forțează 0p)
+  locked         Boolean @default(false) // problemă blocată — nu se mai poate reîncerca
+
+  // AI grading (pentru CODING) — profesorul virtual „Mr. Olla"
+  aiGraded         Boolean  @default(false)
+  aiReasoning      String?  // explicație pedagogică pentru elev (markdown)
+  aiRubric         Json?    // {correctness, style, efficiency} cu scoruri 0-100
+  aiSuspectedAi    Boolean  @default(false)
+  aiSuspicionScore Int?     // 0-100, cât de probabil e că a folosit AI
+  aiTokensIn       Int?     // pentru tracking cost
+  aiTokensOut      Int?
+  teacherOverride  Boolean  @default(false) // profesorul a suprascris nota AI
+  xpAwarded        Int?     // XP efectiv acordat pentru această submisie
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  problem     Problem          @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  lesson      Lesson?          @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, status])
+  @@index([status, createdAt])
+  @@index([lessonId])
+  @@map("problem_submissions")
+}
+
+enum SubmissionStatus {
+  PENDING        // așteaptă feedback profesor
+  GRADED         // notată (trecută)
+  NEEDS_REVISION // profesorul cere refacere
+}
+
+// ==================== AI USAGE TRACKING ====================
+// Tracking pentru rate limit + cost al apelurilor către OpenAI (Mr. Olla)
+
+model AiUsage {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String?  @db.ObjectId
+  ip          String?  // pentru rate-limit dacă nu e student logat
+  endpoint    String   // "grade-code" | "explain" | "detect-ai" | etc.
+  tokensIn    Int      @default(0)
+  tokensOut   Int      @default(0)
+  costUsd     Float    @default(0) // cost estimat pentru această cerere
+  success     Boolean  @default(true)
+  errorMsg    String?
+  createdAt   DateTime @default(now())
+
+  @@index([studentId, createdAt])
+  @@index([ip, createdAt])
+  @@index([createdAt])
+  @@map("ai_usage")
+}
+
+// Chat istoric: elev ↔ Mr. Olla (clarificări la o problemă)
+model AiChatMessage {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId String   @db.ObjectId
+  problemId String   @db.ObjectId
+  lessonId  String?  @db.ObjectId
+  role      String   // "user" | "assistant"
+  content   String
+  tokensIn  Int?
+  tokensOut Int?
+  createdAt DateTime @default(now())
+
+  @@index([studentId, problemId, createdAt])
+  @@index([createdAt])
+  @@map("ai_chat_messages")
+}
+
+// ==================== LEARNING APP PAYMENTS ====================
+// Plata pentru abonament la aplicația /learn (separat de plata pentru lecții la cursuri)
+
+model LearningPayment {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId     String   @db.ObjectId
+  amount        Float    // suma achitată
+  currency      String   @default("MDL")
+  paymentDate   DateTime @default(now())
+  validDays     Int      @default(30) // perioada de valabilitate în zile
+  expiresAt     DateTime // calculat: paymentDate + validDays
+  notes         String?
+  createdById   String?  @db.ObjectId // userul care a înregistrat plata
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, paymentDate])
+  @@index([expiresAt])
+  @@map("learning_payments")
+}
+
+// ==================== GAMIFICATION 2.0 ====================
+// Economy: Coins (= XP mirror), Gems (premium, doar din coding)
+
+model StudentEconomy {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId           String   @unique @db.ObjectId
+  coins               Int      @default(0)
+  gems                Int      @default(0)
+  totalCoinsEarned    Int      @default(0)
+  totalGemsEarned     Int      @default(0)
+  totalCoinsSpent     Int      @default(0)
+  totalGemsSpent      Int      @default(0)
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+
+  student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("student_economy")
+}
+
+// Streak: minim 3 probleme/zi pentru a păstra streak-ul
+
+model StudentStreak {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  studentId           String   @unique @db.ObjectId
+  current             Int      @default(0)        // streak curent (zile consecutive)
+  best                Int      @default(0)        // recordul personal
+  lastActiveDay       String?                     // YYYY-MM-DD (UTC) — ultima zi cu ≥3 probleme
+  problemsToday       Int      @default(0)        // contor probleme rezolvate azi
+  todayDay            String?                     // YYYY-MM-DD curent (resetat la schimbarea zilei)
+  freezesAvailable    Int      @default(0)        // streak freezes (cumpărate / oferite)
+  freezesUsed         Int      @default(0)
+  multiplier          Float    @default(1.0)      // multiplicator XP/Coins din streak
+  milestones          String[] @default([])       // ["7","30","100"] — ce milestone a atins
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+
+  student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("student_streaks")
+}
+
+// ==================== COSMETICS ====================
+
+enum CosmeticType {
+  THEME
+  PROFILE_BANNER
+  USERNAME_COLOR
+  ANIMATED_FRAME
+  LEADERBOARD_EFFECT
+  ENTRY_EFFECT
+  CODING_AURA
+  TITLE
+  PET
+  RARE_COSMETIC
+  ANIMATED_BACKGROUND
+  PARTICLE_EFFECT
+}
+
+enum Rarity {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+  MYTHIC
+}
+
+enum Currency {
+  COINS
+  GEMS
+}
+
+model Cosmetic {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  description   String?
+  type          CosmeticType
+  rarity        Rarity        @default(COMMON)
+  currency      Currency      @default(COINS)
+  price         Int           @default(0)         // 0 = gratuit / doar din chest
+  imageUrl      String?
+  previewUrl    String?
+  cssPayload    Json?         // pentru THEME/colors/animations: {primary, secondary, gradient, glow, css}
+  active        Boolean       @default(true)
+  shopVisible   Boolean       @default(true)      // false = doar din chest-uri
+  themeId       String?       @db.ObjectId        // dacă type=THEME, link la Theme
+  sortOrder     Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  inventory     CosmeticInventory[]
+  equipped      EquippedCosmetic[]
+  chestRewards  ChestReward[]
+  theme         Theme?        @relation(fields: [themeId], references: [id], onDelete: SetNull)
+
+  @@index([type, active])
+  @@index([rarity])
+  @@map("cosmetics")
+}
+
+model CosmeticInventory {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String    @db.ObjectId
+  cosmeticId  String    @db.ObjectId
+  acquiredAt  DateTime  @default(now())
+  source      String?   // "shop" | "chest" | "leaderboard" | "admin"
+
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  cosmetic    Cosmetic  @relation(fields: [cosmeticId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, cosmeticId])
+  @@index([studentId])
+  @@map("cosmetic_inventory")
+}
+
+model EquippedCosmetic {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String       @db.ObjectId
+  cosmeticId  String       @db.ObjectId
+  type        CosmeticType
+  equippedAt  DateTime     @default(now())
+
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  cosmetic    Cosmetic     @relation(fields: [cosmeticId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, type])
+  @@index([studentId])
+  @@map("equipped_cosmetics")
+}
+
+// ==================== THEMES ====================
+
+model Theme {
+  id            String     @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  description   String?
+  rarity        Rarity     @default(COMMON)
+  currency      Currency   @default(COINS)
+  price         Int        @default(0)
+  active        Boolean    @default(true)
+  // Tokens — culori CSS variables
+  primary       String     @default("#6366f1")
+  secondary     String     @default("#8b5cf6")
+  accent        String     @default("#ec4899")
+  bgGradient    String?    // ex: "linear-gradient(135deg, #1e3a8a, #6366f1)"
+  cardBg        String?    // ex: "rgba(255,255,255,0.05)"
+  textColor     String?
+  glowColor     String?
+  // Fancy
+  animationCss  String?    // CSS arbitrar pentru animații
+  previewUrl    String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  cosmetics     Cosmetic[]
+
+  @@index([active])
+  @@map("themes")
+}
+
+// ==================== CHESTS ====================
+
+enum ChestTier {
+  COMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+model Chest {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  tier        ChestTier     @default(COMMON)
+  currency    Currency      @default(COINS)
+  price       Int           @default(100)
+  imageUrl    String?
+  active      Boolean       @default(true)
+  // Garanții (opțional): ex. minimum guaranteed rarity per opening
+  guaranteedRarity Rarity?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  rewards     ChestReward[]
+  openings    ChestOpening[]
+
+  @@map("chests")
+}
+
+model ChestReward {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  chestId     String    @db.ObjectId
+  cosmeticId  String?   @db.ObjectId         // nullable pentru reward de gems/coins
+  weight      Int       @default(10)         // probabilitate relativă
+  // Reward alternativ pentru currency drop
+  coinsAmount Int?
+  gemsAmount  Int?
+  createdAt   DateTime  @default(now())
+
+  chest       Chest     @relation(fields: [chestId], references: [id], onDelete: Cascade)
+  cosmetic    Cosmetic? @relation(fields: [cosmeticId], references: [id], onDelete: SetNull)
+
+  @@index([chestId])
+  @@map("chest_rewards")
+}
+
+model ChestOpening {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  studentId       String    @db.ObjectId
+  chestId         String    @db.ObjectId
+  rewardCosmeticId String?  @db.ObjectId
+  rewardCoins     Int?
+  rewardGems      Int?
+  createdAt       DateTime  @default(now())
+
+  student         Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  chest           Chest     @relation(fields: [chestId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+  @@map("chest_openings")
+}
+
+// ==================== LEADERBOARD EVENTS ====================
+
+enum LeaderboardType {
+  XP
+  CODING
+  GEMS
+  COINS
+}
+
+model LeaderboardEvent {
+  id          String              @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  type        LeaderboardType     @default(XP)
+  startsAt    DateTime
+  endsAt      DateTime
+  active      Boolean             @default(true)
+  // Vizual
+  bannerUrl   String?
+  themeColor  String?             // hex
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  entries     LeaderboardEntry[]
+  rewards     LeaderboardReward[]
+
+  @@index([active, endsAt])
+  @@map("leaderboard_events")
+}
+
+model LeaderboardEntry {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  eventId     String           @db.ObjectId
+  studentId   String           @db.ObjectId
+  score       Int              @default(0)
+  rank        Int?
+  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime         @default(now())
+
+  event       LeaderboardEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, studentId])
+  @@index([eventId, score])
+  @@map("leaderboard_entries")
+}
+
+model LeaderboardReward {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  eventId     String           @db.ObjectId
+  rank        Int              // 1, 2, 3, ... sau 0 = top10, etc.
+  rankTo      Int?             // dacă vrei range (ex 4-10)
+  // Tipul de reward (oricare combinație)
+  xp          Int?             // XP acordat ca recompensă
+  coins       Int?
+  gems        Int?
+  cosmeticId  String?          @db.ObjectId
+  chestId     String?          @db.ObjectId
+  title       String?
+  customReward String?         // Recompensă liberă: "Gift card Steam $10", "Lecție gratuită", etc.
+  createdAt   DateTime         @default(now())
+
+  event       LeaderboardEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  claims      RewardClaim[]
+
+  @@index([eventId, rank])
+  @@map("leaderboard_rewards")
+}
+
+model RewardClaim {
+  id          String            @id @default(auto()) @map("_id") @db.ObjectId
+  studentId   String            @db.ObjectId
+  rewardId    String            @db.ObjectId
+  claimedAt   DateTime          @default(now())
+
+  student     Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  reward      LeaderboardReward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, rewardId])
+  @@map("reward_claims")
+}
+
+
+// ==================== LECȚII DE PROBĂ ====================
+// O lecție de probă e un eveniment unic, la o dată și oră anume — nu intră în
+// orarul săptămânal al grupei. Poate fi pentru un lead (încă neconvertit) sau
+// pentru un elev existent.
+
+model TrialLesson {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  leadId      String?     @db.ObjectId // cine vine la probă, dacă e încă lead
+  studentId   String?     @db.ObjectId // sau un elev existent
+  groupId     String?     @db.ObjectId // grupa în care asistă (opțional)
+  teacherId   String?     @db.ObjectId
+  scheduledAt DateTime    // data + ora, o singură dată
+  durationMin Int         @default(60)
+  status      TrialStatus @default(PROGRAMAT)
+  notes       String?
+  createdById String?     @db.ObjectId
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  lead      Lead?    @relation("LeadTrials", fields: [leadId], references: [id], onDelete: Cascade)
+  student   Student? @relation("StudentTrials", fields: [studentId], references: [id], onDelete: Cascade)
+  group     Group?   @relation("GroupTrials", fields: [groupId], references: [id], onDelete: SetNull)
+  teacher   User?    @relation("TeacherTrials", fields: [teacherId], references: [id], onDelete: SetNull)
+  createdBy User?    @relation("CreatedTrials", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([scheduledAt])
+  @@index([groupId])
+  @@index([leadId])
+  @@map("trial_lessons")
+}
+
+enum TrialStatus {
+  PROGRAMAT // urmează
+  PREZENT   // a venit
+  ABSENT    // nu a venit
+  ANULAT    // anulată
+}
+
+// ==================== SALARII PROFESORI ====================
+// Fiecare sumă care intră sau iese din salariul unui profesor e un rând aici.
+// Soldul = suma tuturor rândurilor nesterse. Nu are relații cu grupa sau
+// lecția: istoricul rămâne întreg chiar dacă acelea se șterg, de aceea
+// numele se păstrează ca snapshot.
+
+enum SalaryType {
+  FIXED        // aceeași sumă pentru fiecare lecție ținută
+  PER_PRESENCE // suma × numărul elevilor prezenți
+}
+
+enum SalaryEntryKind {
+  LESSON     // lecție ținută — adăugată automat
+  MAKEUP     // recuperare ținută — adăugată automat
+  BONUS      // adăugată manual (ex. lecție nepusă în sistem)
+  PAYOUT     // salariul scos — sumă negativă
+  ADJUSTMENT // corectare manuală, plus sau minus
+}
+
+model SalaryEntry {
+  id            String          @id @default(auto()) @map("_id") @db.ObjectId
+  teacherId     String          @db.ObjectId
+  teacherName   String?
+  kind          SalaryEntryKind
+  amount        Float           // + intră în salariu, − iese
+  reason        String
+  date          DateTime        // când s-a ținut lecția / când s-a făcut operația — după ea se împarte pe luni
+
+  // Doar pentru lecții și recuperări
+  groupId       String?         @db.ObjectId
+  groupName     String?
+  sessionId     String?         @db.ObjectId
+  makeupId      String?         @db.ObjectId
+  salaryType    SalaryType?     // regula grupei în momentul lecției
+  rate          Float?
+  presentCount  Int?
+  studentsCount Int?
+
+  // Odată editată de mână, suma nu mai e recalculată automat
+  manual        Boolean         @default(false)
+
+  createdById   String?         @db.ObjectId
+  createdByName String?
+  editedAt      DateTime?
+  editedByName  String?
+  deleted       Boolean         @default(false)
+  deletedAt     DateTime?
+  deletedByName String?
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([teacherId, date])
+  @@index([sessionId])
+  @@index([makeupId])
+  @@index([date])
+  @@map("salary_entries")
+}
+
+/// Ce așteaptă botul de salarii de la un admin (o sumă, un motiv) după ce a apăsat un buton.
+model SalaryBotState {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  chatId    String   @unique
+  action    String   // bonus | payout | adjust | edit
+  teacherId String?  @db.ObjectId
+  entryId   String?  @db.ObjectId
+  expiresAt DateTime
+  updatedAt DateTime @updatedAt
+
+  @@map("salary_bot_states")
+}
+
+// ==================== CACHE PENTRU DATE EXTERNE ====================
+
+/// Răspunsuri de la Meta, ținute între cereri.
+///
+/// Memoria unei funcții serverless trăiește doar cât instanța ei, iar Vercel
+/// pornește mai multe — așa că fiecare deschidere de pagină nimerea deseori o
+/// instanță „rece" și aștepta din nou după Meta. Aici răspunsul e comun.
+model ExternalCache {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key       String   @unique  // ex. "meta:inbox"
+  payload   Json
+  updatedAt DateTime @updatedAt
+
+  @@map("external_cache")
+}
+
+// =====================================================================
+//  SITE PUBLIC PI SCHOOL — cursuri, înscrieri, recenzii, mesaje de contact
+//  (nu există la Olla; cererile noi de pe site intră și ca lead-uri în CRM)
+// =====================================================================
+
+// ==================== COURSES ====================
+
+model Course {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  slug             String    @unique
+  descriptionShort String
+  descriptionLong  String?
+  category         String?
+  level            String?   // "Începător", "Intermediar", "Avansat"
+  ageMin           Int?
+  ageMax           Int?
+  duration         String?   // "60 min", "90 min"
+  lessonsCount     Int?
+  price            Float     @default(0)
+  discountPrice    Float?    // Prețul redus (opțional)
+  seatsTotal       Int       @default(10)
+  active           Boolean   @default(true)
+  imageUrl         String?   // Imagine principală (deprecated, se folosește mainImageUrl)
+  mainImageUrl     String?   // Imaginea principală selectată
+  images           String[]  // Array de URL-uri pentru toate imaginile
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  enrollments Enrollment[]
+  groups      Group[]
+  reviews     Review[]
+
+  @@map("courses")
+}
+
+// ==================== ENROLLMENTS (formular curs) ====================
+
+model Enrollment {
+  id            String           @id @default(auto()) @map("_id") @db.ObjectId
+  courseId      String           @db.ObjectId
+  studentName   String
+  studentAge    Int?
+  parentName    String
+  parentPhone   String
+  parentEmail   String
+  city          String?
+  observations  String?
+  status        EnrollmentStatus @default(NEW)
+  notes         String?          // Legacy - kept for backwards compatibility
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  // Relations
+  course        Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  enrollmentNotes EnrollmentNote[] @relation("EnrollmentNotes")
+
+  @@map("enrollments")
+}
+
+model EnrollmentNote {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  enrollmentId String?  @db.ObjectId
+  inscriereId  String?  @db.ObjectId
+  content      String
+  createdAt    DateTime @default(now())
+
+  // Relations
+  enrollment   Enrollment? @relation("EnrollmentNotes", fields: [enrollmentId], references: [id], onDelete: Cascade)
+  inscriere    Inscriere?  @relation("InscriereNotes", fields: [inscriereId], references: [id], onDelete: Cascade)
+
+  @@map("enrollment_notes")
+}
+
+enum EnrollmentStatus {
+  LEAD
+  FARA_RASPUNS
+  CONTACTAT
+  PROGRAMAT
+  PRIMA_LECTIE
+  FINALIZAT_LECTIA
+  SE_GANDESTE
+  ASTEPTAM_PLATA
+  PLATIT
+  STUDIAZA
+  PLECAT
+  LOST_LEAD
+  TEST
+  // Legacy statuses for backwards compatibility
+  NEW
+  CONTACTED
+  CONFIRMED
+  REJECTED
+}
+
+// ==================== REVIEWS ====================
+
+model Review {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  authorName String
+  roleLabel  String?  // "Părinte", "Elev"
+  rating     Int      @default(5) // 1-5
+  message    String
+  avatarUrl  String?
+  courseId   String?  @db.ObjectId
+  published  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@map("reviews")
+}
+
+// ==================== INSCRIERI (formularul /inscriere) ====================
 
 model Inscriere {
   id           String          @id @default(auto()) @map("_id") @db.ObjectId
@@ -614,7 +1760,7 @@ model Inscriere {
   notes        String?         // Legacy - kept for backwards compatibility
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
-  
+
   // Relations
   inscriereNotes EnrollmentNote[] @relation("InscriereNotes")
 
@@ -627,7 +1773,7 @@ enum InscriereStatus {
   CONTACTAT
   CONFIRMAT
   RESPINS
-  // New CRM statuses
+  // CRM statuses
   LEAD
   FARA_RASPUNS
   PROGRAMAT
@@ -654,7 +1800,7 @@ model ContactMessage {
   notes     String?              // Legacy - kept for backwards compatibility
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
-  
+
   // Relations
   contactNotes ContactNote[] @relation("ContactNotes")
 
@@ -666,48 +1812,30 @@ model ContactNote {
   contactMessageId String   @db.ObjectId
   content          String
   createdAt        DateTime @default(now())
-  
+
   // Relations
   contactMessage   ContactMessage @relation("ContactNotes", fields: [contactMessageId], references: [id], onDelete: Cascade)
-  
+
   @@map("contact_notes")
 }
 
 enum ContactMessageStatus {
-  LEAD              // 🔵 Lead
-  FARA_RASPUNS      // 🔘 Fără Răspuns
-  CONTACTAT         // 🟡 Contactat
-  PROGRAMAT         // 🟠 Programat
-  PRIMA_LECTIE      // 🟢 Prima Lecție
-  FINALIZAT_LECTIA  // ⚫ Finalizat Lecția
-  SE_GANDESTE       // 🔘 Se Gândește
-  ASTEPTAM_PLATA    // 💵 Așteptăm Plata
-  PLATIT            // 💰 Plătit
-  STUDIAZA          // 🟣 Studiază
-  PLECAT            // 🔴 Plecat
-  LOST_LEAD         // ❌ Lost Lead
-  TEST              // 🧪 Test
+  LEAD
+  FARA_RASPUNS
+  CONTACTAT
+  PROGRAMAT
+  PRIMA_LECTIE
+  FINALIZAT_LECTIA
+  SE_GANDESTE
+  ASTEPTAM_PLATA
+  PLATIT
+  STUDIAZA
+  PLECAT
+  LOST_LEAD
+  TEST
   // Legacy statuses for backwards compatibility
   NOU
   CITIT
   RASPUNS
   ARHIVAT
-}
-
-// ==================== MISSED SESSIONS (LECȚII RATATE) ====================
-
-model MissedSession {
-  id             String   @id @default(auto()) @map("_id") @db.ObjectId
-  groupId        String   @db.ObjectId
-  scheduledDate  DateTime // Data și ora când trebuia să fie lecția
-  scheduledDay   String   // Ziua programată (ex: "Mon", "Wed")
-  scheduledTime  String   // Ora programată (ex: "18:00")
-  reason         String?  // Motivul (ex: "Profesorul nu a pornit lecția la timp")
-  acknowledged   Boolean  @default(false) // Dacă admin-ul a văzut/confirmat
-  createdAt      DateTime @default(now())
-
-  // Relations
-  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  @@map("missed_sessions")
 }

@@ -58,7 +58,6 @@ export async function PATCH(request, { params }) {
         student: true,
         group: {
           include: {
-            course: { select: { title: true } }
           }
         }
       }

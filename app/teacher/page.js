@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { redirect } from 'next/navigation'
+import { NOT_COMPLETED } from '@/lib/group-filters'
 import Link from 'next/link'
 import { 
   UserGroupIcon, 
@@ -14,16 +14,11 @@ import {
 export default async function TeacherDashboardPage() {
   const session = await getServerSession(authOptions)
 
-  if (!session?.user?.id) {
-    redirect('/login')
-  }
-
-  // Get teacher's groups and statistics
-  const [groups, students, recentSessions, makeupLessons] = await Promise.all([
+  // Get teacher's groups and statistics — all in one parallel batch
+  const [groups, students, recentSessions, makeupLessons, totalSessions] = await Promise.all([
     prisma.group.findMany({
-      where: { teacherId: session.user.id, active: true },
+      where: { teacherId: session.user.id, active: true, ...NOT_COMPLETED },
       include: {
-        course: true,
         groupStudents: {
           where: { status: 'ACTIVE' }
         }
@@ -37,7 +32,7 @@ export default async function TeacherDashboardPage() {
       include: {
         student: true,
         group: {
-          include: { course: true }
+          include: {}
         }
       },
       distinct: ['studentId']
@@ -50,7 +45,7 @@ export default async function TeacherDashboardPage() {
       take: 5,
       include: {
         group: {
-          include: { course: true }
+          include: {}
         },
         attendances: true
       }
@@ -62,18 +57,16 @@ export default async function TeacherDashboardPage() {
       },
       include: {
         group: {
-          include: { course: true }
+          include: {}
         },
         students: true
       }
-    })
+    }),
+    prisma.lessonSession.count({ where: { group: { teacherId: session.user.id } } }),
   ])
 
   const totalStudents = students.length
   const totalGroups = groups.length
-  const totalSessions = await prisma.lessonSession.count({
-    where: { group: { teacherId: session.user.id } }
-  })
   const upcomingMakeups = makeupLessons.length
 
   const stats = [
@@ -134,7 +127,7 @@ export default async function TeacherDashboardPage() {
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-gray-900 text-xs xs:text-sm truncate">{group.name}</p>
-                      <p className="text-[10px] xs:text-xs text-gray-500 truncate">{group.course.title}</p>
+                      <p className="text-[10px] xs:text-xs text-gray-500 truncate">{group.level}</p>
                     </div>
                     <span className="ml-2 px-1.5 xs:px-2 py-0.5 xs:py-1 bg-blue-100 text-blue-800 text-[10px] xs:text-xs font-medium rounded-full whitespace-nowrap">
                       {group.groupStudents.length} elevi

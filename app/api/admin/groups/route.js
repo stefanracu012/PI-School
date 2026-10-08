@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { NOT_COMPLETED, IS_COMPLETED } from '@/lib/group-filters'
+import { parseSchoolDate } from '@/lib/timezone'
 import { requireAdmin, getCurrentUser } from '@/lib/session'
 import { require2FAToken } from '@/lib/security/action-tokens'
 import { checkPermission } from '@/lib/permissions'
 import { sendTeacherDirectMessage } from '@/lib/telegram'
+import { parseGroupSalary, SALARY_PERMISSION } from '@/lib/salary'
 
 const ITEMS_PER_PAGE = 20
 
@@ -23,14 +26,22 @@ export async function GET(request) {
     const branchId = searchParams.get('branchId') || ''
     const day = searchParams.get('day') || ''
     const all = searchParams.get('all') === 'true' // Pentru a obține toate (pentru filtre)
+    // 'active' (implicit) = grupele în curs, 'completed' = cele terminate,
+    // 'all' = amândouă. Grupele terminate nu trebuie să încurce nicăieri.
+    const status = searchParams.get('status') || 'active'
 
     // Build where clause
     const where = {}
+
+    // Căutarea își pune propriul OR, așa că starea grupei intră pe AND —
+    // altfel una din cele două condiții ar călca peste cealaltă.
+    if (status === 'completed') Object.assign(where, IS_COMPLETED)
+    else if (status !== 'all') where.AND = [...(where.AND || []), NOT_COMPLETED]
     
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
-        { course: { title: { contains: search, mode: 'insensitive' } } },
+        { level: { contains: search, mode: 'insensitive' } },
         { teacher: { name: { contains: search, mode: 'insensitive' } } },
         { teacher: { email: { contains: search, mode: 'insensitive' } } },
         { branch: { name: { contains: search, mode: 'insensitive' } } },
@@ -65,7 +76,6 @@ export async function GET(request) {
       skip: all ? 0 : (page - 1) * ITEMS_PER_PAGE,
       take: all ? undefined : ITEMS_PER_PAGE,
       include: { 
-        course: true, 
         teacher: {
           select: {
             id: true,
@@ -159,13 +169,17 @@ export async function POST(request) {
       }, { status: 403 })
     }
 
-    const { name, courseId, teacherId, branchId, scheduleDays, scheduleTime, 
-            locationType, locationDetails, startDate, active } = body
+    const { name, level, teacherId, branchId, scheduleDays, scheduleTime, 
+            locationType, locationDetails, startDate, active, monthlyLessons, isTrial, trialDate, billingType, notes } = body
+
+    // Plata profesorului o pune doar cine se ocupă de salarii
+    const canSetSalary = (await checkPermission(SALARY_PERMISSION)).allowed
 
     const group = await prisma.group.create({
       data: {
         name,
-        courseId,
+        ...(canSetSalary ? parseGroupSalary(body) : {}),
+        level: level || null,
         teacherId,
         branchId: branchId || null,
         scheduleDays,
@@ -173,10 +187,16 @@ export async function POST(request) {
         locationType,
         locationDetails,
         startDate: startDate ? new Date(startDate) : null,
+        monthlyLessons: parseInt(monthlyLessons, 10) || 8,
+        billingType: billingType === 'INDIVIDUAL' ? 'INDIVIDUAL' : 'MONTHLY',
+        notes: notes?.trim() || null,
+        isTrial: !!isTrial,
+        trialDate: isTrial ? parseSchoolDate(trialDate) : null,
+        // O probă nu se repetă săptămânal
+        ...(isTrial ? { scheduleDays: [], scheduleTime: null } : {}),
         active
       },
       include: {
-        course: { select: { title: true } },
         branch: { select: { name: true } },
         teacher: { select: { name: true, telegramChatId: true } }
       }
@@ -207,7 +227,7 @@ export async function POST(request) {
       const message = `🎉 <b>Grupă Nouă Atribuită!</b>
 
 📚 Grupă: <b>${group.name}</b>
-🎓 Curs: ${group.course?.title || 'Nespecificat'}
+📘 Nivel: ${group.level || 'Nespecificat'}
 ${group.branch ? `🏢 Filială: ${group.branch.name}` : ''}
 ${scheduleInfo}
 ${locationDetails ? `📍 Locație: ${locationDetails}` : ''}
@@ -215,7 +235,7 @@ ${locationType === 'online' ? '💻 Online' : '🏫 Fizic'}
 
 ✨ Mult succes cu noua grupă!`
 
-      await sendTeacherDirectMessage(group.teacher.telegramChatId, message)
+      await sendTeacherDirectMessage(group.teacher.telegramChatId, message, group.teacher.name)
     }
 
     return NextResponse.json(group, { status: 201 })

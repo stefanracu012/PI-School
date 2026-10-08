@@ -9,6 +9,54 @@ Platformă de management pentru cursuri after-school, dezvoltată cu Next.js 15,
 - **Portal Profesor**: Prezențe, grupuri, elevi, recuperări
 - **Autentificare**: NextAuth.js cu credențiale și Google OAuth
 
+## 🧭 CRM (adus de la Olla English)
+
+Panoul `/admin` și `/teacher` sunt CRM-ul complet de la Olla English, 1 la 1:
+Leads (pipeline vânzări, follow-up, lecții de probă), Elevi, Grupe (plată lunară
+sau individuală, pachete de lecții, încheiere grupă), Orar, Sesiuni, Recuperări,
+Plăți, Statistică, Mesaje/Reclame Meta, Securitate, Audit.
+
+Diferențe față de Olla:
+
+- **Nivelurile** sunt ale PI School (`lib/levels.js`): Clasa pregătitoare, Clasele 1–12,
+  Evaluare Națională, Bacalaureat, Liceu, Universitate, Olimpiadă.
+- **Site-ul public** (cursuri, recenzii, înscriere) rămâne al PI School; formularele de pe
+  site (`/inscriere`, cursuri, contact) intră automat ca lead-uri cu sursa SITE.
+- Paginile admin **Cursuri (site)** și **Recenzii (site)** administrează site-ul;
+  **Înscrieri vechi** și **Contact vechi** sunt arhiva dinainte de CRM.
+
+### Migrarea datelor vechi
+
+La prima pornire după deploy, aplicația completează automat câmpurile noi pe
+documentele vechi (altfel Prisma dă eroare la citire) și importă înscrierile și
+mesajele vechi ca lead-uri. Rulează o singură dată (marcaj în `external_cache`),
+e idempotentă și se poate forța manual cu `npm run db:migrate-crm`.
+Indexurile noi se creează cu `npm run db:push`.
+
+### Botul de salarii
+
+Un bot Telegram separat, doar pentru salariile profesorilor. Fiecare grupă are o regulă de plată
+(sumă fixă pe lecție sau sumă × elevi prezenți), setată la crearea/editarea grupei. Când
+lecția e salvată, suma intră singură în salariul profesorului, iar el primește mesaj cu
+motivul. Adminii cu dreptul **Gestionează salariile** (și superadminii) văd în bot toți
+profesorii, istoricul pe luni și de la început, adaugă bonusuri, corectează și scot salariul.
+
+1. Creează botul la [@BotFather](https://t.me/BotFather) și pune token-ul în `TELEGRAM_SALARY_BOT_TOKEN`
+2. După deploy: `npm run telegram:salary-webhook https://pischool.md`
+3. Fiecare admin și profesor deschide botul și apasă **Start**. Contul se recunoaște după
+   Telegram-ul conectat în CRM (Securitate → Telegram).
+
+### Cron-uri (cron-job.org)
+
+Cron-urile rulează din cron-job.org, nu din Vercel (`vercel.json` e gol intenționat).
+Fiecare job face `GET` cu header-ul `Authorization: Bearer <CRON_SECRET>`:
+
+| URL | Program (UTC) |
+|---|---|
+| `https://pischool.md/api/cron/notifications` | zilnic 06:00 |
+| `https://pischool.md/api/cron/lead-followups` | la fiecare 10 minute |
+| `https://pischool.md/api/cron/meta-leads` | la fiecare 15 minute (doar cu Meta configurat) |
+
 ## 📋 Cerințe
 
 - Node.js 18.17 sau mai nou

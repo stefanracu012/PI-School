@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import toast from 'react-hot-toast'
-import Link from 'next/link'
 import Image from 'next/image'
 import Script from 'next/script'
 
@@ -175,11 +173,13 @@ export default function LoginPage() {
         return
       }
 
-      // Credentials validated (including 2FA if enabled)! Now use NextAuth signIn with preValidated flag
+      // Credentials validated (including 2FA if enabled)! Now use NextAuth signIn
+      // with the one-time token issued by /api/auth/login
       console.log('Calling NextAuth signIn...')
+      const { signIn } = await import('next-auth/react')
       const result = await signIn('credentials', {
         email: formData.email,
-        preValidated: 'true', // Skip password re-check, API already validated everything
+        loginToken: validateData.loginToken,
         redirect: false
       })
       
@@ -227,20 +227,17 @@ export default function LoginPage() {
       
       <div className="w-full max-w-md">
         {/* Logo */}
-        <Link href="/" className="flex items-center justify-center space-x-2 xs:space-x-3 mb-5 xs:mb-8">
-          <div className="relative w-10 h-10 xs:w-12 xs:h-12 rounded-full overflow-hidden ring-2 ring-[#30919f]/30">
-            <Image
-              src="/pi.png"
-              alt="PI School"
-              fill
-              className="object-cover"
-            />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-lg xs:text-xl font-bold text-gray-900">PI SCHOOL</span>
-            <span className="text-[9px] xs:text-[10px] font-medium text-[#30919f] tracking-[0.15em] uppercase -mt-1">Educație</span>
-          </div>
-        </Link>
+        <div className="flex items-center justify-center mb-5 xs:mb-8">
+          <Image
+            src="/pi.png"
+            alt="PI School"
+            width={882}
+            height={882}
+            className="h-12 xs:h-16 w-auto rounded-full object-contain"
+            priority
+          />
+          <span className="ml-3 text-2xl xs:text-3xl font-bold text-gray-900">PI SCHOOL</span>
+        </div>
 
         {/* Login Card */}
         <div className="bg-white rounded-xl xs:rounded-2xl shadow-xl p-5 xs:p-8">
@@ -379,10 +376,8 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-4 xs:mt-6 text-center text-xs xs:text-sm text-gray-500">
-            <Link href="/" className="text-indigo-600 hover:text-indigo-700 font-medium">
-              ← Înapoi la site
-            </Link>
+          <p className="mt-4 xs:mt-6 text-center text-xs xs:text-sm text-gray-400">
+            PI School · CRM intern
           </p>
         </div>
       </div>

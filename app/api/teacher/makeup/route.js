@@ -35,9 +35,7 @@ export async function GET(request) {
             }
           },
           group: {
-            include: {
-              course: true
-            }
+            include: {}
           },
           teacher: {
             select: {
@@ -69,7 +67,6 @@ export async function GET(request) {
         student: true,
         group: {
           include: {
-            course: true,
             teacher: {
               select: {
                 id: true,
@@ -145,7 +142,7 @@ export async function POST(request) {
           }
         },
         group: {
-          include: { course: true }
+          include: {}
         },
         branch: true
       }

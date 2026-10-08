@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import {
   PlusIcon,
@@ -10,6 +10,9 @@ import {
   UserPlusIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
+import LevelSelect from '@/components/LevelSelect'
+import StartSessionButton from '@/components/teacher/StartSessionButton'
+import { getDaysFromToday, getTodayName, getTomorrowName, nearestDay } from '@/lib/scheduleDays'
 
 // Helper pentru formatarea programului
 const formatSchedule = (scheduleDays, scheduleTime) => {
@@ -37,7 +40,7 @@ const formatSchedule = (scheduleDays, scheduleTime) => {
 
 const DAYS = ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă', 'Duminică']
 
-export default function TeacherGroupsClient({ initialGroups, courses, branches, allGroups }) {
+export default function TeacherGroupsClient({ initialGroups, branches, allGroups, isSuperTeacher = false }) {
   const [groups, setGroups] = useState(initialGroups)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAddStudentModal, setShowAddStudentModal] = useState(false)
@@ -49,7 +52,7 @@ export default function TeacherGroupsClient({ initialGroups, courses, branches, 
 
   const [formData, setFormData] = useState({
     name: '',
-    courseId: '',
+    level: '',
     branchId: '',
     scheduleDays: [],
     scheduleTimes: {}, // { 'Luni': '14:00', 'Miercuri': '16:00' }
@@ -85,8 +88,8 @@ export default function TeacherGroupsClient({ initialGroups, courses, branches, 
 
   const handleCreateGroup = async (e) => {
     e.preventDefault()
-    if (!formData.name.trim() || !formData.courseId) {
-      toast.error('Numele și cursul sunt obligatorii')
+    if (!formData.name.trim()) {
+      toast.error('Numele grupei este obligatoriu')
       return
     }
 
@@ -115,7 +118,7 @@ export default function TeacherGroupsClient({ initialGroups, courses, branches, 
       setShowCreateModal(false)
       setFormData({
         name: '',
-        courseId: '',
+        level: '',
         branchId: '',
         scheduleDays: [],
         scheduleTimes: {},
@@ -241,6 +244,137 @@ export default function TeacherGroupsClient({ initialGroups, courses, branches, 
     }
   }
 
+  // Grupele mele, ordonate ca la /orar: azi, mâine, apoi restul zilelor.
+  // Fiecare grupă apare o singură dată, sub cea mai apropiată zi din programul ei.
+  const groupSections = useMemo(() => {
+    const todayName = getTodayName()
+    const tomorrowName = getTomorrowName()
+    const orderedDays = getDaysFromToday()
+
+    const buckets = {}
+    orderedDays.forEach(d => { buckets[d] = [] })
+    const noSchedule = []
+
+    groups.forEach(group => {
+      const day = nearestDay(group.scheduleDays)
+      if (!day || !buckets[day]) {
+        noSchedule.push(group)
+        return
+      }
+      buckets[day].push(group)
+    })
+
+    orderedDays.forEach(day => {
+      buckets[day].sort((a, b) => {
+        const ta = getTimeForDay(a.scheduleTime, day) || ''
+        const tb = getTimeForDay(b.scheduleTime, day) || ''
+        if (!ta) return 1
+        if (!tb) return -1
+        return ta.localeCompare(tb)
+      })
+    })
+
+    const sections = orderedDays
+      .filter(day => buckets[day].length > 0)
+      .map(day => ({
+        day,
+        isToday: day === todayName,
+        isTomorrow: day === tomorrowName,
+        groups: buckets[day],
+      }))
+
+    if (noSchedule.length > 0) {
+      sections.push({ day: 'Fără program stabilit', isToday: false, isTomorrow: false, groups: noSchedule })
+    }
+
+    return sections
+  }, [groups])
+
+  const renderGroupCard = (group) => (
+    <div
+      key={group.id}
+      className="bg-white rounded-xl shadow-sm p-4 xs:p-5 md:p-6 hover:shadow-md transition-shadow"
+    >
+      <div className="flex items-start justify-between mb-3 xs:mb-4">
+        <div className="flex-1 min-w-0 pr-2">
+          <Link
+            href={`/teacher/groups/${group.id}`}
+            className="text-base xs:text-lg font-bold text-gray-900 hover:text-teal-600 truncate block"
+          >
+            {group.name}
+          </Link>
+          <p className="text-xs xs:text-sm text-gray-500 truncate">{group.level}</p>
+        </div>
+        <span className={`px-2 py-1 text-[10px] xs:text-xs font-medium rounded-full whitespace-nowrap flex-shrink-0 ${
+          group.active
+            ? 'bg-green-100 text-green-800'
+            : 'bg-gray-100 text-gray-600'
+        }`}>
+          {group.active ? 'Activ' : 'Inactiv'}
+        </span>
+      </div>
+
+      <div className="space-y-1.5 xs:space-y-2 mb-3 xs:mb-4">
+        <div className="flex items-center gap-1.5 xs:gap-2 text-xs xs:text-sm text-gray-600">
+          <AcademicCapIcon className="w-3.5 h-3.5 xs:w-4 xs:h-4 flex-shrink-0" />
+          <span className="truncate">
+            {group.groupStudents?.filter(gs => gs.status === 'ACTIVE' || !gs.status).length || 0} elevi activi
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 xs:gap-2 text-xs xs:text-sm text-gray-600">
+          <CalendarDaysIcon className="w-3.5 h-3.5 xs:w-4 xs:h-4 flex-shrink-0" />
+          <span className="truncate">{formatSchedule(group.scheduleDays, group.scheduleTime)}</span>
+        </div>
+      </div>
+
+      {/* Students preview - only active */}
+      {group.groupStudents?.filter(gs => gs.status === 'ACTIVE' || !gs.status).length > 0 && (
+        <div className="border-t border-gray-100 pt-3 xs:pt-4 mb-3">
+          <p className="text-[10px] xs:text-xs text-gray-500 mb-1.5 xs:mb-2">Elevi activi:</p>
+          <div className="flex flex-wrap gap-1">
+            {group.groupStudents.filter(gs => gs.status === 'ACTIVE' || !gs.status).slice(0, 5).map(gs => (
+              <span
+                key={gs.student?.id || gs.id}
+                className="px-1.5 xs:px-2 py-0.5 xs:py-1 bg-gray-100 text-gray-600 text-[10px] xs:text-xs rounded"
+              >
+                {gs.student?.fullName?.split(' ')[0] || 'Elev'}
+              </span>
+            ))}
+            {group.groupStudents.filter(gs => gs.status === 'ACTIVE' || !gs.status).length > 5 && (
+              <span className="px-1.5 xs:px-2 py-0.5 xs:py-1 bg-gray-100 text-gray-600 text-[10px] xs:text-xs rounded">
+                +{group.groupStudents.filter(gs => gs.status === 'ACTIVE' || !gs.status).length - 5}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2 pt-3 xs:pt-4 border-t border-gray-100">
+        <div className="w-full">
+          <StartSessionButton
+            groupId={group.id}
+            scheduleDays={group.scheduleDays}
+            scheduleTime={group.scheduleTime}
+            isSuperTeacher={isSuperTeacher}
+          />
+        </div>
+        <Link
+          href={`/teacher/groups/${group.id}`}
+          className="flex-1 text-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs xs:text-sm"
+        >
+          Vezi Detalii
+        </Link>
+        <button
+          onClick={() => openAddStudentModal(group)}
+          className="flex items-center justify-center gap-1 px-3 py-2 bg-teal-100 text-teal-700 rounded-lg hover:bg-teal-200 text-xs xs:text-sm"
+        >
+          <UserPlusIcon className="w-4 h-4" />
+          Adaugă
+        </button>
+      </div>
+    </div>
+  )
+
   return (
     <div className="space-y-4 xs:space-y-5 md:space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -268,80 +402,27 @@ export default function TeacherGroupsClient({ initialGroups, courses, branches, 
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 xs:gap-4 md:gap-6">
-          {groups.map(group => (
-            <div
-              key={group.id}
-              className="bg-white rounded-xl shadow-sm p-4 xs:p-5 md:p-6 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-3 xs:mb-4">
-                <div className="flex-1 min-w-0 pr-2">
-                  <Link 
-                    href={`/teacher/groups/${group.id}`}
-                    className="text-base xs:text-lg font-bold text-gray-900 hover:text-teal-600 truncate block"
-                  >
-                    {group.name}
-                  </Link>
-                  <p className="text-xs xs:text-sm text-gray-500 truncate">{group.course?.title}</p>
-                </div>
-                <span className={`px-2 py-1 text-[10px] xs:text-xs font-medium rounded-full whitespace-nowrap flex-shrink-0 ${
-                  group.active 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-gray-100 text-gray-600'
+        <div className="space-y-6 xs:space-y-8">
+          {groupSections.map(section => (
+            <div key={section.day} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h2 className={`text-base xs:text-lg font-semibold ${
+                  section.isToday ? 'text-teal-700' : section.isTomorrow ? 'text-amber-700' : 'text-gray-800'
                 }`}>
-                  {group.active ? 'Activ' : 'Inactiv'}
+                  {section.day}
+                </h2>
+                {section.isToday && (
+                  <span className="px-2 py-0.5 bg-teal-600 text-white text-xs font-medium rounded-full">Azi</span>
+                )}
+                {section.isTomorrow && (
+                  <span className="px-2 py-0.5 bg-amber-500 text-white text-xs font-medium rounded-full">Mâine</span>
+                )}
+                <span className="text-xs xs:text-sm text-gray-500">
+                  ({section.groups.length} {section.groups.length === 1 ? 'grupă' : 'grupe'})
                 </span>
               </div>
-
-              <div className="space-y-1.5 xs:space-y-2 mb-3 xs:mb-4">
-                <div className="flex items-center gap-1.5 xs:gap-2 text-xs xs:text-sm text-gray-600">
-                  <AcademicCapIcon className="w-3.5 h-3.5 xs:w-4 xs:h-4 flex-shrink-0" />
-                  <span className="truncate">
-                    {group.groupStudents?.filter(gs => gs.status === 'ACTIVE' || !gs.status).length || 0} elevi activi
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 xs:gap-2 text-xs xs:text-sm text-gray-600">
-                  <CalendarDaysIcon className="w-3.5 h-3.5 xs:w-4 xs:h-4 flex-shrink-0" />
-                  <span className="truncate">{formatSchedule(group.scheduleDays, group.scheduleTime)}</span>
-                </div>
-              </div>
-
-              {/* Students preview - only active */}
-              {group.groupStudents?.filter(gs => gs.status === 'ACTIVE' || !gs.status).length > 0 && (
-                <div className="border-t border-gray-100 pt-3 xs:pt-4 mb-3">
-                  <p className="text-[10px] xs:text-xs text-gray-500 mb-1.5 xs:mb-2">Elevi activi:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {group.groupStudents.filter(gs => gs.status === 'ACTIVE' || !gs.status).slice(0, 5).map(gs => (
-                      <span
-                        key={gs.student?.id || gs.id}
-                        className="px-1.5 xs:px-2 py-0.5 xs:py-1 bg-gray-100 text-gray-600 text-[10px] xs:text-xs rounded"
-                      >
-                        {gs.student?.fullName?.split(' ')[0] || 'Elev'}
-                      </span>
-                    ))}
-                    {group.groupStudents.filter(gs => gs.status === 'ACTIVE' || !gs.status).length > 5 && (
-                      <span className="px-1.5 xs:px-2 py-0.5 xs:py-1 bg-gray-100 text-gray-600 text-[10px] xs:text-xs rounded">
-                        +{group.groupStudents.filter(gs => gs.status === 'ACTIVE' || !gs.status).length - 5}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-3 xs:pt-4 border-t border-gray-100">
-                <Link
-                  href={`/teacher/groups/${group.id}`}
-                  className="flex-1 text-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-xs xs:text-sm"
-                >
-                  Vezi Detalii
-                </Link>
-                <button
-                  onClick={() => openAddStudentModal(group)}
-                  className="flex items-center justify-center gap-1 px-3 py-2 bg-teal-100 text-teal-700 rounded-lg hover:bg-teal-200 text-xs xs:text-sm"
-                >
-                  <UserPlusIcon className="w-4 h-4" />
-                  Adaugă
-                </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 xs:gap-4 md:gap-6">
+                {section.groups.map(group => renderGroupCard(group))}
               </div>
             </div>
           ))}
@@ -371,26 +452,20 @@ export default function TeacherGroupsClient({ initialGroups, courses, branches, 
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-gray-900 placeholder-gray-500"
-                  placeholder="Ex: Grupa Începători Luni"
+                  placeholder="Ex: Clasa 9 Luni"
                   required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-1">
-                  Curs *
+                  Nivel
                 </label>
-                <select
-                  value={formData.courseId}
-                  onChange={(e) => setFormData({ ...formData, courseId: e.target.value })}
+                <LevelSelect
+                  value={formData.level}
+                  onChange={(e) => setFormData({ ...formData, level: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-gray-900"
-                  required
-                >
-                  <option value="">Selectează curs</option>
-                  {courses?.map(course => (
-                    <option key={course.id} value={course.id}>{course.title}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
@@ -584,7 +659,7 @@ export default function TeacherGroupsClient({ initialGroups, courses, branches, 
             <form onSubmit={handleAddStudent} className="p-4 space-y-4">
               <div className="p-3 bg-gray-50 rounded-lg">
                 <div className="font-medium text-gray-900">{selectedGroup.name}</div>
-                <div className="text-sm text-gray-500">{selectedGroup.course?.title}</div>
+                <div className="text-sm text-gray-500">{selectedGroup.level}</div>
               </div>
 
               {loadingStudents ? (

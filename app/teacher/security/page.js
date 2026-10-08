@@ -1,5 +1,6 @@
 'use client'
 
+import TelegramConnect from '@/components/TelegramConnect'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import toast from 'react-hot-toast'
@@ -359,6 +360,10 @@ export default function TeacherSecurityPage() {
         </div>
       </div>
 
+      {/* Telegram */}
+      <div className="mt-6">
+        <TelegramConnect />
+      </div>
       {/* Account Info */}
       <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Informații cont</h2>

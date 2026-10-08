@@ -58,8 +58,37 @@ const TYPE_CONFIG = {
     label: 'Lecție anulată',
     color: 'bg-orange-500',
     lightColor: 'bg-orange-50 border-orange-200 text-orange-800'
+  },
+  LATE_SESSION: {
+    icon: '⏰',
+    label: 'Lecție întârziată',
+    color: 'bg-amber-500',
+    lightColor: 'bg-amber-50 border-amber-200 text-amber-800'
+  },
+  REVISION_REQUEST: {
+    icon: '✏️',
+    label: 'Cerere de refacere',
+    color: 'bg-indigo-500',
+    lightColor: 'bg-indigo-50 border-indigo-200 text-indigo-800'
+  },
+  LEAD_FOLLOWUP: {
+    icon: '📞',
+    label: 'Recontactare lead',
+    color: 'bg-teal-500',
+    lightColor: 'bg-teal-50 border-teal-200 text-teal-800'
   }
 }
+
+// Un tip nou apărut în baza de date nu trebuie să dea pagina jos: până
+// primește culorile lui, se afișează neutru.
+const FALLBACK_CONFIG = {
+  icon: '🔔',
+  label: 'Notificare',
+  color: 'bg-gray-500',
+  lightColor: 'bg-gray-50 border-gray-200 text-gray-700'
+}
+
+const configFor = (type) => TYPE_CONFIG[type] || FALLBACK_CONFIG
 
 export default function NotificationsPageClient({ notifications: initialNotifications, isAdmin }) {
   const [notifications, setNotifications] = useState(initialNotifications)
@@ -188,7 +217,7 @@ export default function NotificationsPageClient({ notifications: initialNotifica
           Necitite ({unreadCount})
         </button>
         {availableTypes.map(type => {
-          const config = TYPE_CONFIG[type]
+          const config = configFor(type)
           const count = notifications.filter(n => n.type === type).length
           return (
             <button
@@ -226,7 +255,7 @@ export default function NotificationsPageClient({ notifications: initialNotifica
               <h3 className="text-sm font-semibold text-gray-500 mb-3 capitalize">{date}</h3>
               <div className="space-y-2">
                 {dateNotifications.map((notification) => {
-                  const config = TYPE_CONFIG[notification.type] || TYPE_CONFIG.LOW_LESSONS
+                  const config = configFor(notification.type)
                   
                   return (
                     <div

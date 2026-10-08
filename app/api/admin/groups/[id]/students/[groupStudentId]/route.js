@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { syncLeadForStudent } from '@/lib/student-leads'
 import prisma from '@/lib/prisma'
 import { requireAdmin } from '@/lib/session'
 import { checkPermission } from '@/lib/permissions'
@@ -6,16 +7,19 @@ import { checkPermission } from '@/lib/permissions'
 export async function DELETE(request, { params }) {
   try {
     await requireAdmin()
-    
+
     // Check permission
     const permCheck = await checkPermission('groups.students.remove')
     if (!permCheck.allowed) {
       return NextResponse.json({ error: 'Nu ai permisiunea să elimini elevi din grupă' }, { status: 403 })
     }
-    
+
     const { groupStudentId } = await params
 
-    await prisma.groupStudent.delete({ where: { id: groupStudentId } })
+    const removed = await prisma.groupStudent.delete({ where: { id: groupStudentId } })
+
+    // Elevul își are lead-ul lui; statusul urmează grupele (Studiază / Waitlist)
+    syncLeadForStudent(removed.studentId).catch(() => {})
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -40,14 +44,14 @@ export async function PATCH(request, { params }) {
         return NextResponse.json({ error: 'Nu ai permisiunea să modifici lecțiile' }, { status: 403 })
       }
     }
-    
+
     if (addAbsences !== undefined) {
       const permCheck = await checkPermission('groups.students.absences')
       if (!permCheck.allowed) {
         return NextResponse.json({ error: 'Nu ai permisiunea să modifici absențele' }, { status: 403 })
       }
     }
-    
+
     if (status !== undefined) {
       const permCheck = await checkPermission('groups.students.status')
       if (!permCheck.allowed) {
@@ -93,6 +97,9 @@ export async function PATCH(request, { params }) {
       where: { id: groupStudentId },
       data: updateData
     })
+
+    // Elevul își are lead-ul lui; statusul urmează grupele (Studiază / Waitlist)
+    syncLeadForStudent(updated.studentId).catch(() => {})
 
     return NextResponse.json(updated)
   } catch (error) {

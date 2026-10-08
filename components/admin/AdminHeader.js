@@ -1,11 +1,10 @@
 'use client'
 
 import { signOut } from 'next-auth/react'
-import Link from 'next/link'
 import Image from 'next/image'
 import { useState, useEffect, useRef } from 'react'
 import NotificationBell from '@/components/NotificationBell'
-import { GlobeAltIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline'
+import { ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline'
 
 export default function AdminHeader({ user }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -42,17 +41,6 @@ export default function AdminHeader({ user }) {
 
         {/* User menu */}
         <div className="flex items-center gap-x-2 xs:gap-x-4 lg:gap-x-6">
-          {/* Vezi site-ul */}
-          <Link
-            href="/"
-            target="_blank"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs xs:text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-            title="Vezi site-ul"
-          >
-            <GlobeAltIcon className="w-4 h-4 xs:w-5 xs:h-5" />
-            <span className="hidden sm:inline">Vezi site-ul</span>
-          </Link>
-
           {/* Notifications */}
           <NotificationBell isAdmin={true} />
 

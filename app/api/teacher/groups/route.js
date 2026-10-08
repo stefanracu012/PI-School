@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { NOT_COMPLETED } from '@/lib/group-filters'
 
 export async function GET() {
   try {
@@ -14,10 +15,10 @@ export async function GET() {
     const groups = await prisma.group.findMany({
       where: { 
         teacherId: session.user.id,
-        active: true 
+        active: true,
+        ...NOT_COMPLETED,
       },
       include: {
-        course: true,
         branch: true,
         groupStudents: {
           where: { status: 'ACTIVE' },
