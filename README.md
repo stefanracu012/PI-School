@@ -28,8 +28,11 @@ Diferențe față de Olla:
 ### Migrarea datelor vechi
 
 La prima pornire după deploy, aplicația completează automat câmpurile noi pe
-documentele vechi (altfel Prisma dă eroare la citire) și importă înscrierile și
-mesajele vechi ca lead-uri. Rulează o singură dată (marcaj în `external_cache`),
+documentele vechi (altfel Prisma dă eroare la citire), importă înscrierile și
+mesajele vechi ca lead-uri și repară rândurile orfane: grupele/recuperările al căror
+profesor a fost șters direct din baza de date trec pe „⚠️ Profesor șters” (mută-le din
+admin pe un profesor real), iar rândurile legate de grupe/elevi/lecții inexistente se
+șterg. Fiecare pas rulează o singură dată (marcaj în `external_cache`),
 e idempotentă și se poate forța manual cu `npm run db:migrate-crm`.
 Indexurile noi se creează cu `npm run db:push`.
 
