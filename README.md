@@ -36,18 +36,18 @@ admin pe un profesor real), iar rândurile legate de grupe/elevi/lecții inexist
 e idempotentă și se poate forța manual cu `npm run db:migrate-crm`.
 Indexurile noi se creează cu `npm run db:push`.
 
-### Botul de salarii
+### Salarii profesori
 
-Un bot Telegram separat, doar pentru salariile profesorilor. Fiecare grupă are o regulă de plată
-(sumă fixă pe lecție sau sumă × elevi prezenți), setată la crearea/editarea grupei. Când
-lecția e salvată, suma intră singură în salariul profesorului, iar el primește mesaj cu
-motivul. Adminii cu dreptul **Gestionează salariile** (și superadminii) văd în bot toți
-profesorii, istoricul pe luni și de la început, adaugă bonusuri, corectează și scot salariul.
+Fiecare grupă are o regulă de plată pentru profesor (sumă fixă pe lecție sau sumă × elevi
+prezenți), setată la crearea/editarea grupei. Când lecția e salvată, suma intră singură în
+salariul profesorului, iar el primește mesaj în privat pe Telegram și notificare în CRM.
 
-1. Creează botul la [@BotFather](https://t.me/BotFather) și pune token-ul în `TELEGRAM_SALARY_BOT_TOKEN`
-2. După deploy: `npm run telegram:salary-webhook https://pischool.md`
-3. Fiecare admin și profesor deschide botul și apasă **Start**. Contul se recunoaște după
-   Telegram-ul conectat în CRM (Securitate → Telegram).
+- **Admin → Salarii**: toți profesorii cu soldul, istoricul pe luni și de la început,
+  bonusuri, corectări, salariul scos, sume editate sau anulate
+- **Profesor → Salariul meu**: doar salariul lui, de citit
+
+Drepturi (la permisiunile fiecărui cont; superadminii pot tot): **Vezi / Editează / Anulează
+salariile** pentru admini și **Vede salariul propriu** pentru profesori.
 
 ### Cron-uri (cron-job.org)
 

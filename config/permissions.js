@@ -308,11 +308,28 @@ export const PERMISSIONS = {
     category: 'Statistică'
   },
 
-  // Salarii profesori (botul de salarii din Telegram)
-  'salaries.manage': {
-    label: 'Gestionează salariile',
-    description: 'Vede și editează salariile tuturor profesorilor în botul de salarii, adaugă bonusuri, scoate salariul și setează plata pe grupe',
+  // Salarii profesori (pagina Salarii)
+  'salaries.view': {
+    label: 'Vezi salariile',
+    description: 'Vede pagina Salarii: toți profesorii, soldurile și tot istoricul; vede plata setată pe grupe',
     category: 'Salarii'
+  },
+  'salaries.edit': {
+    label: 'Editează salariile',
+    description: 'Adaugă bonusuri și corectări, scoate salariul, editează sume și setează plata profesorului pe grupe',
+    category: 'Salarii'
+  },
+  'salaries.delete': {
+    label: 'Anulează sume din salariu',
+    description: 'Anulează o sumă din istoricul unui profesor (rămâne în istoric marcată ca anulată)',
+    category: 'Salarii'
+  },
+
+  // Salariul propriu, pentru profesori
+  'teacher.salary.view': {
+    label: 'Vede salariul propriu',
+    description: 'Profesorul are pagina „Salariul meu" și primește mesaj în privat pe Telegram (și notificare în CRM) după fiecare lecție și la fiecare sumă adăugată sau scoasă. Fără limită de timp',
+    category: 'Salariul meu'
   },
 
   // Absențe ratate
@@ -445,6 +462,7 @@ export const PERMISSION_CATEGORIES = [
   'Reclame',
   'Statistică',
   'Salarii',
+  'Salariul meu',
   'Notificări',
   'Orar',
   'Securitate',

@@ -37,7 +37,7 @@ export default function TeacherForm({ teacher }) {
   const isTeacherRole = formData.role === 'TEACHER'
   const showPermissions = isSuperAdmin && (formData.role === 'ADMIN' || isTeacherRole)
   const visibleCategories = isTeacherRole
-    ? [TEACHER_CATEGORY]
+    ? [TEACHER_CATEGORY, 'Salariul meu']
     : PERMISSION_CATEGORIES
 
   const permissionsByCategory = useMemo(() => getPermissionsByCategory(), [])

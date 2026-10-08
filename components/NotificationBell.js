@@ -82,6 +82,12 @@ const TYPE_CONFIG = {
     color: 'bg-teal-500',
     iconColor: 'text-teal-600',
     lightColor: 'bg-teal-50 border-teal-200'
+  },
+  SALARY_UPDATE: {
+    Icon: BanknotesIcon,
+    color: 'bg-emerald-500',
+    iconColor: 'text-emerald-600',
+    lightColor: 'bg-emerald-50 border-emerald-200'
   }
 }
 

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
+import { salaryAccess } from '@/lib/salary-access'
 import {
   UserGroupIcon,
   ClipboardDocumentCheckIcon,
@@ -19,7 +20,8 @@ import {
   ClockIcon,
   InboxIcon,
   BookOpenIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  BanknotesIcon
 } from '@heroicons/react/24/outline'
 
 // Spinner component for loading state
@@ -91,6 +93,12 @@ const navigation = [
     icon: ArrowPathIcon
   },
   {
+    name: 'Salariul meu',
+    href: '/teacher/salary',
+    icon: BanknotesIcon,
+    salary: true
+  },
+  {
     name: 'Securitate',
     href: '/teacher/security',
     icon: ShieldCheckIcon
@@ -107,6 +115,9 @@ export default function TeacherSidebar() {
 
   // Verifică dacă utilizatorul e admin
   const isAdmin = session?.user?.role === 'ADMIN'
+
+  // „Salariul meu" apare doar celor cărora administrația le-a activat salariul
+  const visibleNavigation = navigation.filter((item) => !item.salary || salaryAccess(session?.user).own)
 
   // Handler pentru navigare cu loading state
   const handleNavigation = (href, closeMobile = false) => {
@@ -141,7 +152,7 @@ export default function TeacherSidebar() {
 
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1">
-            {navigation.map((item) => {
+            {visibleNavigation.map((item) => {
               const isActive = item.exact
                 ? pathname === item.href
                 : pathname === item.href || pathname.startsWith(item.href + '/')
@@ -261,7 +272,7 @@ export default function TeacherSidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const isActive = item.exact
               ? pathname === item.href
               : pathname === item.href || pathname.startsWith(item.href + '/')

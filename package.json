@@ -19,7 +19,6 @@
     "env:check": "node scripts/check-env.mjs",
     "telegram:topics": "node scripts/setup-telegram-topics.mjs",
     "telegram:webhook": "node scripts/set-telegram-webhook.mjs",
-    "telegram:salary-webhook": "node scripts/set-telegram-webhook.mjs --salary",
     "telegram:discover": "node scripts/discover-telegram-topics.mjs",
     "test:stats": "node scripts/test-statistics.mjs",
     "test:leads": "node scripts/test-lead-children.mjs",

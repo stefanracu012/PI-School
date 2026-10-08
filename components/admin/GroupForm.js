@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import toast from 'react-hot-toast'
 import TwoFactorModal from './TwoFactorModal'
 import LevelSelect from '@/components/LevelSelect'
+import { salaryAccess } from '@/lib/salary-access'
 
 const days = ['Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă', 'Duminică']
 
@@ -33,9 +34,10 @@ export default function GroupForm({ group, teachers, branches = [] }) {
   const [show2FA, setShow2FA] = useState(false)
   const [branchSchedule, setBranchSchedule] = useState([])
   const [loadingSchedule, setLoadingSchedule] = useState(false)
-  // Plata profesorului o vede și o schimbă doar cine se ocupă de salarii
-  const canSetSalary =
-    session?.user?.role === 'SUPERADMIN' || (session?.user?.permissions || []).includes('salaries.manage')
+  // Plata profesorului: o vede cine vede salariile, o schimbă cine le editează
+  const salary = salaryAccess(session?.user)
+  const canViewSalary = salary.view
+  const canSetSalary = salary.edit
   const [formData, setFormData] = useState({
     name: group?.name || '',
     level: group?.level || '',
@@ -341,9 +343,12 @@ export default function GroupForm({ group, teachers, branches = [] }) {
           </div>
         )}
 
-        {canSetSalary && (
-          <div className="md:col-span-2 space-y-2">
+        {canViewSalary && (
+          <fieldset disabled={!canSetSalary} className="md:col-span-2 space-y-2 disabled:opacity-70">
             <p className="text-xs xs:text-sm font-medium text-gray-700">Plata profesorului pe lecție</p>
+            {!canSetSalary && (
+              <p className="text-[11px] text-gray-500">Doar vizualizare — schimbarea cere dreptul „Editează salariile”.</p>
+            )}
             <div className="grid xs:grid-cols-3 gap-2 xs:gap-3">
               {[
                 { value: '', title: 'Nesetat', desc: 'Lecțiile nu se adaugă singure la salariu.' },
@@ -394,7 +399,7 @@ export default function GroupForm({ group, teachers, branches = [] }) {
                 </p>
               </div>
             )}
-          </div>
+          </fieldset>
         )}
 
           <div>

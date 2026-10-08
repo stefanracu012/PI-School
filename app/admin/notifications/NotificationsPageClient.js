@@ -76,6 +76,12 @@ const TYPE_CONFIG = {
     label: 'Recontactare lead',
     color: 'bg-teal-500',
     lightColor: 'bg-teal-50 border-teal-200 text-teal-800'
+  },
+  SALARY_UPDATE: {
+    icon: '💰',
+    label: 'Salariu',
+    color: 'bg-emerald-500',
+    lightColor: 'bg-emerald-50 border-emerald-200 text-emerald-800'
   }
 }
 

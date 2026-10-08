@@ -643,6 +643,7 @@ enum NotificationType {
   CANCELLED_SESSION      // Lecție anulată de profesor
   REVISION_REQUEST       // Profesorul a cerut refacerea unei probleme
   LEAD_FOLLOWUP          // Lead de recontactat azi
+  SALARY_UPDATE          // S-a adăugat/scos o sumă din salariul profesorului
 }
 
 // ==================== PAYMENTS ====================
@@ -1598,19 +1599,6 @@ model SalaryEntry {
   @@index([makeupId])
   @@index([date])
   @@map("salary_entries")
-}
-
-/// Ce așteaptă botul de salarii de la un admin (o sumă, un motiv) după ce a apăsat un buton.
-model SalaryBotState {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  chatId    String   @unique
-  action    String   // bonus | payout | adjust | edit
-  teacherId String?  @db.ObjectId
-  entryId   String?  @db.ObjectId
-  expiresAt DateTime
-  updatedAt DateTime @updatedAt
-
-  @@map("salary_bot_states")
 }
 
 // ==================== CACHE PENTRU DATE EXTERNE ====================

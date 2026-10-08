@@ -75,7 +75,6 @@ feature('Rate limit pe Redis', !!env.UPSTASH_REDIS_REST_URL, 'fallback pe MongoD
 const tgBot = env.TELEGRAM_LESSONS_BOT_TOKEN
 const tgChat = env.TELEGRAM_ADMIN_CHAT_ID
 feature('Notificări Telegram', !!(tgBot && tgChat), 'TELEGRAM_LESSONS_BOT_TOKEN + TELEGRAM_ADMIN_CHAT_ID')
-feature('Botul de salarii', !!env.TELEGRAM_SALARY_BOT_TOKEN, 'TELEGRAM_SALARY_BOT_TOKEN')
 
 if (tgBot && tgChat) {
   const threads = [

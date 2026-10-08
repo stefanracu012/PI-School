@@ -47,6 +47,7 @@ const navigation = [
   { name: 'Lecții Ratate', href: '/admin/missed-sessions', icon: 'warning', permission: 'missed-sessions.view' },
   { name: 'Recuperări', href: '/admin/makeup', icon: 'refresh', permission: 'makeup.view' },
   { name: 'Plăți', href: '/admin/payments', icon: 'banknotes', permission: 'payments.view' },
+  { name: 'Salarii', href: '/admin/salaries', icon: 'banknotes', anyPermission: ['salaries.view', 'salaries.edit', 'salaries.delete'] },
   { name: 'Mesaje', href: '/admin/messages', icon: 'chat', permission: 'messages.view' },
   { name: 'Reclame', href: '/admin/ads', icon: 'megaphone', permission: 'ads.view' },
   // Site-ul public PI School
@@ -189,6 +190,8 @@ export default function AdminSidebar({ user }) {
   const filteredNavigation = navigation.filter(item => {
     // SUPERADMIN vede tot
     if (userIsSuperAdmin) return true
+    // Oricare din mai multe permisiuni deschide pagina
+    if (item.anyPermission) return item.anyPermission.some((p) => hasPermission(p))
     // Dashboard e vizibil pentru toți
     if (!item.permission && !item.superadminOnly) return true
     // Itemele superadminOnly sunt vizibile doar pentru SUPERADMIN

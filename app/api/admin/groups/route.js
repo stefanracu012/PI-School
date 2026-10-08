@@ -6,7 +6,7 @@ import { requireAdmin, getCurrentUser } from '@/lib/session'
 import { require2FAToken } from '@/lib/security/action-tokens'
 import { checkPermission } from '@/lib/permissions'
 import { sendTeacherDirectMessage } from '@/lib/telegram'
-import { parseGroupSalary, SALARY_PERMISSION } from '@/lib/salary'
+import { parseGroupSalary, SALARY_PERMS } from '@/lib/salary'
 
 const ITEMS_PER_PAGE = 20
 
@@ -173,7 +173,7 @@ export async function POST(request) {
             locationType, locationDetails, startDate, active, monthlyLessons, isTrial, trialDate, billingType, notes } = body
 
     // Plata profesorului o pune doar cine se ocupă de salarii
-    const canSetSalary = (await checkPermission(SALARY_PERMISSION)).allowed
+    const canSetSalary = (await checkPermission(SALARY_PERMS.edit)).allowed
 
     const group = await prisma.group.create({
       data: {
