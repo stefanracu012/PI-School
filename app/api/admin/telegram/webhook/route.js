@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { createAuditLog, SEVERITY } from '@/lib/security/audit.js'
 import { getRequestContext } from '@/lib/security/guards.js'
+import { telegramRequest } from '@/lib/telegram-api.js'
 
 /**
  * Webhook-ul botului Telegram, administrat din Securitate — doar SUPERADMIN.
@@ -37,26 +38,9 @@ async function requireSuperAdmin() {
   return { user: session.user }
 }
 
-async function callTelegram(method, payload) {
-  if (!BOT_TOKEN) return { ok: false, description: 'TELEGRAM_LESSONS_BOT_TOKEN lipsește din variabilele de mediu' }
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload ?? {}),
-      signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
-    })
-    return await res.json()
-  } catch (err) {
-    if (err.name === 'TimeoutError' || err.name === 'AbortError') {
-      return {
-        ok: false,
-        description: `Telegram nu a răspuns în ${TELEGRAM_TIMEOUT_MS / 1000} secunde — serverul nu poate ajunge la api.telegram.org`,
-      }
-    }
-    return { ok: false, description: err.message }
-  }
-}
+// IPv4 forțat + cod real de eroare, vezi lib/telegram-api.js
+const callTelegram = (method, payload) =>
+  telegramRequest(BOT_TOKEN, method, payload, { timeoutMs: TELEGRAM_TIMEOUT_MS })
 
 // Domeniul de pe care s-a apăsat butonul (în spatele proxy-ului Vercel contează x-forwarded-*)
 function getBaseUrl(request) {
