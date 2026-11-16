@@ -3,6 +3,8 @@
 import TelegramConnect from '@/components/TelegramConnect'
 import MetaLeadsToggle from '@/components/admin/MetaLeadsToggle'
 import DatabaseBackup from '@/components/admin/DatabaseBackup'
+import TelegramWebhook from '@/components/admin/TelegramWebhook'
+import ChangePassword from '@/components/ChangePassword'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
@@ -437,10 +439,22 @@ export default function SecurityPage() {
         </div>
       </div>
 
+      {/* Parola proprie */}
+      <div className="mt-6">
+        <ChangePassword />
+      </div>
+
       {/* Telegram */}
       <div className="mt-6">
         <TelegramConnect />
       </div>
+
+      {/* Webhook Telegram — doar superadmin */}
+      {isSuperAdmin && (
+        <div className="mt-6">
+          <TelegramWebhook />
+        </div>
+      )}
 
       {/* Automatizări — doar superadmin le vede și le poate schimba */}
       {isSuperAdmin && (

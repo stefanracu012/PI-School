@@ -1,6 +1,7 @@
 'use client'
 
 import TelegramConnect from '@/components/TelegramConnect'
+import ChangePassword from '@/components/ChangePassword'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import toast from 'react-hot-toast'
@@ -358,6 +359,11 @@ export default function TeacherSecurityPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Parola proprie */}
+      <div className="mt-6">
+        <ChangePassword />
       </div>
 
       {/* Telegram */}
