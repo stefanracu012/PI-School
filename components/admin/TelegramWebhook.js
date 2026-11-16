@@ -31,6 +31,21 @@ function ProbeRow({ label, probe }) {
   )
 }
 
+function BotApiRow({ label, probe }) {
+  if (!probe) return null
+  const text = probe.ok
+    ? `✓ răspuns în ${probe.ms} ms${probe.username ? ` (@${probe.username})` : ''}`
+    : probe.answered
+      ? `răspuns în ${probe.ms} ms: ${probe.errorCode || ''} ${probe.error || ''}`
+      : `✗ fără răspuns (${probe.error})`
+  return (
+    <div className="flex flex-wrap gap-x-3">
+      <span className="w-28 shrink-0 text-gray-500">{label}</span>
+      <span className={probe.answered ? 'text-gray-800' : 'text-red-700 font-medium'}>{text}</span>
+    </div>
+  )
+}
+
 function Diagnostic({ data }) {
   if (!data) return null
   return (
@@ -40,6 +55,17 @@ function Diagnostic({ data }) {
       </p>
       <ProbeRow label="api.telegram.org" probe={data.telegram} />
       <ProbeRow label="control (GitHub)" probe={data.control} />
+      {data.token && (
+        <p className={data.token.validFormat ? 'text-emerald-700' : 'text-red-700 font-medium'}>
+          Token: {!data.token.present
+            ? 'lipsește'
+            : data.token.validFormat
+              ? `format corect (${data.token.length} caractere)`
+              : `format greșit (${data.token.length} caractere${data.token.hasQuotes ? ', are ghilimele' : ''}${data.token.hasWhitespace ? ', are spații' : ''}${data.token.startsWithBot ? ', începe cu „bot"' : ''}) — trebuie să arate ca 1234567890:AAH…`}
+        </p>
+      )}
+      <BotApiRow label="Bot API, token fals" probe={data.botApiFakeToken} />
+      <BotApiRow label="Bot API, tokenul tău" probe={data.botApiRealToken} />
     </div>
   )
 }

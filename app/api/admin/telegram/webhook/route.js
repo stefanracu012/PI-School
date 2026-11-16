@@ -49,7 +49,7 @@ const isNetworkFailure = (result) => !result.ok && !!result.code
 // Când serverul nu ajunge la Telegram: măsurăm pașii (DNS → TCP → TLS → HTTP) din serverul real
 // și îi salvăm în audit log, ca să se poată citi și fără acces la logurile Vercel.
 async function runNetworkDiagnostic(actorId) {
-  const diagnostic = await diagnoseTelegramNetwork()
+  const diagnostic = await diagnoseTelegramNetwork(BOT_TOKEN)
   await createAuditLog({
     action: 'telegram_diagnostic',
     actorId,
