@@ -17,6 +17,10 @@ import { getRequestContext } from '@/lib/security/guards.js'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
+
+// Fără timeout, un api.telegram.org inaccesibil din server ține cererea deschisă la nesfârșit
+const TELEGRAM_TIMEOUT_MS = 8000
 
 const BOT_TOKEN = process.env.TELEGRAM_LESSONS_BOT_TOKEN
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET
@@ -40,9 +44,16 @@ async function callTelegram(method, payload) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload ?? {}),
+      signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
     })
     return await res.json()
   } catch (err) {
+    if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+      return {
+        ok: false,
+        description: `Telegram nu a răspuns în ${TELEGRAM_TIMEOUT_MS / 1000} secunde — serverul nu poate ajunge la api.telegram.org`,
+      }
+    }
     return { ok: false, description: err.message }
   }
 }

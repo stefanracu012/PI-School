@@ -20,16 +20,27 @@ export default function TelegramWebhook() {
   const [status, setStatus] = useState(null)
   const [loadError, setLoadError] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [isHttps, setIsHttps] = useState(true)
+
+  useEffect(() => { setIsHttps(window.location.protocol === 'https:') }, [])
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/telegram/webhook', { cache: 'no-store' })
+      // Serverul se oprește singur după ~8 s; 20 s aici e doar plasa de siguranță
+      const res = await fetch('/api/admin/telegram/webhook', {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(20000),
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || `Eroare ${res.status}`)
       setStatus(data)
       setLoadError(null)
     } catch (err) {
-      setLoadError(err.message)
+      setLoadError(
+        err.name === 'TimeoutError' || err.name === 'AbortError'
+          ? 'serverul nu a răspuns la timp'
+          : err.message
+      )
     }
   }, [])
 
@@ -38,13 +49,20 @@ export default function TelegramWebhook() {
   const setWebhook = async () => {
     setBusy(true)
     try {
-      const res = await fetch('/api/admin/telegram/webhook', { method: 'POST' })
+      const res = await fetch('/api/admin/telegram/webhook', {
+        method: 'POST',
+        signal: AbortSignal.timeout(25000),
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || `Eroare ${res.status}`)
       toast.success('Webhook setat — botul răspunde acum')
       await load()
     } catch (err) {
-      toast.error(err.message)
+      toast.error(
+        err.name === 'TimeoutError' || err.name === 'AbortError'
+          ? 'Serverul nu a răspuns la timp. Încearcă din nou.'
+          : err.message
+      )
     } finally {
       setBusy(false)
     }
@@ -86,13 +104,14 @@ export default function TelegramWebhook() {
         )}
       </div>
 
-      {loadError ? (
+      {loadError && (
         <p className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-          Nu am putut citi starea webhook-ului: {loadError}
+          Nu am putut citi starea webhook-ului: {loadError}. Poți încerca totuși „Setează webhook&rdquo;.
         </p>
-      ) : !status ? (
-        <div className="mt-4 h-16 bg-gray-100 rounded-lg animate-pulse" />
-      ) : (
+      )}
+      {!status && !loadError && <div className="mt-4 h-16 bg-gray-100 rounded-lg animate-pulse" />}
+
+      {status && (
         <>
           {!status.botConfigured && (
             <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -143,35 +162,36 @@ export default function TelegramWebhook() {
               </p>
             )}
           </div>
-
-          {!status.targetIsHttps && (
-            <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              Ești pe o adresă fără https (probabil localhost). Telegram acceptă webhook doar pe
-              https — deschide site-ul publicat și apasă butonul de acolo.
-            </p>
-          )}
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={setWebhook}
-              disabled={busy || !status.botConfigured || !status.targetIsHttps}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <BoltIcon className={`h-4 w-4 ${busy ? 'animate-pulse' : ''}`} />
-              {busy ? 'Se setează…' : webhook?.active ? 'Resetează webhook' : 'Setează webhook'}
-            </button>
-            <button
-              type="button"
-              onClick={load}
-              disabled={busy}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-60"
-            >
-              Verifică starea
-            </button>
-          </div>
         </>
       )}
+
+      {!isHttps && (
+        <p className="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Ești pe o adresă fără https (probabil localhost). Telegram acceptă webhook doar pe
+          https — deschide site-ul publicat și apasă butonul de acolo.
+        </p>
+      )}
+
+      {/* Butoanele rămân mereu la îndemână, chiar dacă starea nu s-a putut citi */}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={setWebhook}
+          disabled={busy || !isHttps || status?.botConfigured === false}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          <BoltIcon className={`h-4 w-4 ${busy ? 'animate-pulse' : ''}`} />
+          {busy ? 'Se setează…' : webhook?.active ? 'Resetează webhook' : 'Setează webhook'}
+        </button>
+        <button
+          type="button"
+          onClick={load}
+          disabled={busy}
+          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-60"
+        >
+          Verifică starea
+        </button>
+      </div>
     </div>
   )
 }
