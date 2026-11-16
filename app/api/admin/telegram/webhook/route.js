@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { createAuditLog, SEVERITY } from '@/lib/security/audit.js'
 import { getRequestContext } from '@/lib/security/guards.js'
-import { telegramRequest } from '@/lib/telegram-api.js'
+import { telegramRequest, diagnoseTelegramNetwork } from '@/lib/telegram-api.js'
 
 /**
  * Webhook-ul botului Telegram, administrat din Securitate — doar SUPERADMIN.
@@ -18,7 +18,8 @@ import { telegramRequest } from '@/lib/telegram-api.js'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+// 8 s apelul către Telegram + până la ~16 s diagnosticul de rețea, când apelul eșuează
+export const maxDuration = 45
 
 // Fără timeout, un api.telegram.org inaccesibil din server ține cererea deschisă la nesfârșit
 const TELEGRAM_TIMEOUT_MS = 8000
@@ -41,6 +42,23 @@ async function requireSuperAdmin() {
 // IPv4 forțat + cod real de eroare, vezi lib/telegram-api.js
 const callTelegram = (method, payload) =>
   telegramRequest(BOT_TOKEN, method, payload, { timeoutMs: TELEGRAM_TIMEOUT_MS })
+
+// `code` apare doar când nu s-a putut vorbi deloc cu Telegram (rețea), nu când Telegram a răspuns cu eroare
+const isNetworkFailure = (result) => !result.ok && !!result.code
+
+// Când serverul nu ajunge la Telegram: măsurăm pașii (DNS → TCP → TLS → HTTP) din serverul real
+// și îi salvăm în audit log, ca să se poată citi și fără acces la logurile Vercel.
+async function runNetworkDiagnostic(actorId) {
+  const diagnostic = await diagnoseTelegramNetwork()
+  await createAuditLog({
+    action: 'telegram_diagnostic',
+    actorId,
+    details: diagnostic,
+    severity: SEVERITY.WARNING,
+    success: false,
+  })
+  return diagnostic
+}
 
 // Domeniul de pe care s-a apăsat butonul (în spatele proxy-ului Vercel contează x-forwarded-*)
 function getBaseUrl(request) {
@@ -74,15 +92,17 @@ function describeWebhook(info, expectedUrl) {
 }
 
 export async function GET(request) {
-  const { error } = await requireSuperAdmin()
+  const { user, error } = await requireSuperAdmin()
   if (error) return error
 
   const baseUrl = getBaseUrl(request)
   const expectedUrl = buildWebhookUrl(baseUrl)
 
   const [me, info] = await Promise.all([callTelegram('getMe'), callTelegram('getWebhookInfo')])
+  const diagnostic = isNetworkFailure(me) ? await runNetworkDiagnostic(user.id) : null
 
   return NextResponse.json({
+    diagnostic,
     botConfigured: !!BOT_TOKEN,
     secretConfigured: !!WEBHOOK_SECRET,
     bot: me.ok ? { username: me.result?.username } : null,
@@ -133,8 +153,15 @@ export async function POST(request) {
   })
 
   if (!result.ok) {
+    const network = isNetworkFailure(result)
+    const diagnostic = network ? await runNetworkDiagnostic(user.id) : null
     return NextResponse.json(
-      { error: `Telegram a refuzat webhook-ul: ${result.description || 'eroare necunoscută'}` },
+      {
+        error: network
+          ? `Serverul nu poate comunica cu Telegram: ${result.description}`
+          : `Telegram a refuzat webhook-ul: ${result.description || 'eroare necunoscută'}`,
+        diagnostic,
+      },
       { status: 502 }
     )
   }

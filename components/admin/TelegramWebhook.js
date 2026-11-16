@@ -10,6 +10,40 @@ import { BoltIcon } from '@heroicons/react/24/outline'
  * nu leagă contul. Butonul setează webhook-ul pe domeniul de pe care e apăsat.
  */
 
+const STEP_LABELS = [['dns', 'DNS'], ['tcp', 'Conexiune'], ['tls', 'TLS'], ['http', 'Răspuns']]
+
+// Rândul de diagnostic pentru un host: unde s-a oprit drumul serverului până la el
+function ProbeRow({ label, probe }) {
+  if (!probe) return null
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span className="w-28 shrink-0 text-gray-500">{label}</span>
+      {STEP_LABELS.map(([key, name]) => {
+        const s = probe[key]
+        if (!s) return <span key={key} className="text-gray-300">{name} —</span>
+        return (
+          <span key={key} className={s.ok ? 'text-emerald-700' : 'text-red-700 font-medium'}>
+            {name} {s.ok ? '✓' : '✗'} {s.ok ? `${s.ms} ms` : s.error}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function Diagnostic({ data }) {
+  if (!data) return null
+  return (
+    <div className="mt-4 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 space-y-1">
+      <p className="font-medium text-gray-700">
+        Diagnostic din server{data.region ? ` (regiunea Vercel ${data.region})` : ''}:
+      </p>
+      <ProbeRow label="api.telegram.org" probe={data.telegram} />
+      <ProbeRow label="control (GitHub)" probe={data.control} />
+    </div>
+  )
+}
+
 const formatDate = (iso) =>
   new Date(iso).toLocaleString('ro-RO', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -21,19 +55,21 @@ export default function TelegramWebhook() {
   const [loadError, setLoadError] = useState(null)
   const [busy, setBusy] = useState(false)
   const [isHttps, setIsHttps] = useState(true)
+  const [diagnostic, setDiagnostic] = useState(null)
 
   useEffect(() => { setIsHttps(window.location.protocol === 'https:') }, [])
 
   const load = useCallback(async () => {
     try {
-      // Serverul se oprește singur după ~8 s; 20 s aici e doar plasa de siguranță
+      // Serverul se oprește singur după cel mult ~25 s (cu diagnostic); 45 s e plasa de siguranță
       const res = await fetch('/api/admin/telegram/webhook', {
         cache: 'no-store',
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(45000),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || `Eroare ${res.status}`)
       setStatus(data)
+      setDiagnostic(data.diagnostic || null)
       setLoadError(null)
     } catch (err) {
       setLoadError(
@@ -51,9 +87,10 @@ export default function TelegramWebhook() {
     try {
       const res = await fetch('/api/admin/telegram/webhook', {
         method: 'POST',
-        signal: AbortSignal.timeout(25000),
+        signal: AbortSignal.timeout(45000),
       })
       const data = await res.json().catch(() => ({}))
+      if (data.diagnostic) setDiagnostic(data.diagnostic)
       if (!res.ok) throw new Error(data.error || `Eroare ${res.status}`)
       toast.success('Webhook setat — botul răspunde acum')
       await load()
@@ -171,6 +208,8 @@ export default function TelegramWebhook() {
           https — deschide site-ul publicat și apasă butonul de acolo.
         </p>
       )}
+
+      <Diagnostic data={diagnostic} />
 
       {/* Butoanele rămân mereu la îndemână, chiar dacă starea nu s-a putut citi */}
       <div className="mt-4 flex flex-wrap items-center gap-3">
