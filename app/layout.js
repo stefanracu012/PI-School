@@ -1,4 +1,3 @@
-import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import AuthProvider from "@/components/providers/AuthProvider";
@@ -7,18 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { CRM_PATH } from "@/lib/crm-paths";
 
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-poppins",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-});
+// Fonturile sunt găzduite în public/fonts și declarate în globals.css (vezi comentariul de acolo)
 
 export const metadata = {
   title: {
@@ -131,10 +119,11 @@ export default function RootLayout({ children }) {
     <html lang="ro" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* Ca înainte cu next/font: fișierele latin se încarcă din start, fără să aștepte CSS-ul */}
+        <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
+        <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossOrigin="anonymous" />
       </head>
-      <body
-        className={`${spaceGrotesk.variable} ${inter.variable} antialiased`}
-      >
+      <body className="antialiased">
         <AuthProvider>
           <ThemeProvider>
             {children}
